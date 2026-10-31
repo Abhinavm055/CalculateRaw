@@ -248,11 +248,12 @@ app.get('/api/inventory/batches', async (req, res) => {
   }
 });
 
-// 6. Interactive Product FIFO Demo Allocation API (Calculated on Backend)
+// 6. Interactive Product FIFO Demo Allocation API (Calculated on Backend in KG)
 app.post('/api/inventory/fifo-product-demo', async (req, res) => {
   try {
     const {
-      units = 500,
+      quantityKg,
+      units,
       productId = 'B',
       costingDate = '2026-11-01',
       effectiveDate = '2026-11-01',
@@ -260,11 +261,6 @@ app.post('/api/inventory/fifo-product-demo', async (req, res) => {
       freight = 10.0,
       duty = 10.0
     } = req.body;
-
-    const u = Number(units);
-    if (!Number.isFinite(u) || u <= 0) {
-      return res.status(400).json({ success: false, message: 'Invalid production units.' });
-    }
 
     // Retrieve Product from Database
     const prodRes = await query('SELECT * FROM products WHERE id = $1', [productId]);
@@ -288,7 +284,21 @@ app.post('/api/inventory/fifo-product-demo', async (req, res) => {
 
     const grossPerUnit = grossResin(p);
     const convPerUnit = p.other + conversionCost(p);
-    const reqResin = u * grossPerUnit;
+
+    // Primary quantity in KG (convenient for inventory managers)
+    let reqResin = 120;
+    let u = 0;
+    if (quantityKg !== undefined && quantityKg !== null && quantityKg !== '') {
+      reqResin = Number(quantityKg);
+      u = reqResin / grossPerUnit;
+    } else if (units !== undefined && units !== null && units !== '') {
+      u = Number(units);
+      reqResin = u * grossPerUnit;
+    }
+
+    if (!Number.isFinite(reqResin) || reqResin <= 0) {
+      return res.status(400).json({ success: false, message: 'Invalid resin quantity in kg.' });
+    }
 
     // Check price hike status
     const isPostHike = costingDate >= effectiveDate;
@@ -308,7 +318,7 @@ app.post('/api/inventory/fifo-product-demo', async (req, res) => {
     if (reqResin > totalAvailable) {
       return res.status(400).json({
         success: false,
-        message: `${u} units require ${reqResin.toFixed(2)} kg resin, exceeding available stock (${totalAvailable} kg) on ${costingDate}.`
+        message: `Requested ${reqResin.toFixed(2)} kg resin exceeds available inventory (${totalAvailable} kg) on ${costingDate}.`
       });
     }
 
@@ -320,7 +330,7 @@ app.post('/api/inventory/fifo-product-demo', async (req, res) => {
     const totalMaterialCost = oldCostTotal + freshCostTotal;
 
     const blendedRatePerKg = reqResin > 0 ? totalMaterialCost / reqResin : 0;
-    const blendedResinPerUnit = totalMaterialCost / u;
+    const blendedResinPerUnit = u > 0 ? totalMaterialCost / u : 0;
     const totalCostPerUnit = blendedResinPerUnit + convPerUnit;
     const profitPerUnit = p.sp - totalCostPerUnit;
     const marginPct = (profitPerUnit / p.sp) * 100;
@@ -345,7 +355,8 @@ app.post('/api/inventory/fifo-product-demo', async (req, res) => {
           conversionPerUnit: convPerUnit
         },
         productionRun: {
-          units: u,
+          quantityKg: Number(reqResin.toFixed(2)),
+          equivalentUnits: Number(u.toFixed(1)),
           grossResinRequired: Number(reqResin.toFixed(4)),
           totalMaterialCost: Number(totalMaterialCost.toFixed(2)),
           blendedRatePerKg: Number(blendedRatePerKg.toFixed(4)),

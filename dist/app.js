@@ -484,25 +484,27 @@ function renderInventory() {
         <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:10px;">
           <div>
             <span class="eyebrow">BACKEND DEMONSTRATION ENGINE</span>
-            <h3 style="margin:4px 0 2px; font-size:16px;">Product B: Medical Connector Production Run</h3>
+            <h3 style="margin:4px 0 2px; font-size:16px;">Product B: Medical Connector Material Issue (FIFO)</h3>
             <p style="font-size:11px; margin:0; color:#5b777a;">
-              Each unit consumes <b>0.20 kg</b> net resin ÷ 0.95 (5% scrap) = <b>0.2105 kg gross resin</b>. Selling Price: <b>₹74.00</b>.
+              Enter raw material requisition in <b>kg</b> (standard warehouse issue). Each connector requires <b>0.20 kg net resin</b> (5% scrap &rarr; <b>0.2105 kg gross</b>). Selling Price: <b>₹74.00</b>.
             </p>
           </div>
           <div style="text-align:right;">
             <label style="font-size:11px; font-weight:600; color:#1c4042; display:block;">
-              Production Quantity (Units):
+              Resin Quantity Required (kg):
             </label>
-            <input id="demo-prod-units" type="number" min="1" max="1400" value="500" style="padding:7px 10px; width:120px; font-size:13px; font-weight:700; border:1px solid #c9d8d5; border-radius:5px; text-align:right; margin-top:4px;">
+            <input id="demo-prod-kg" type="number" min="1" max="300" step="any" value="120" style="padding:7px 10px; width:130px; font-size:13px; font-weight:700; border:1px solid #c9d8d5; border-radius:5px; text-align:right; margin-top:4px;">
           </div>
         </div>
 
         <div style="display:flex; gap:6px; margin:12px 0 16px; flex-wrap:wrap;">
-          <span style="font-size:10px; color:#688285; align-self:center; margin-right:4px;">Quick Batch Sizes:</span>
-          <button type="button" class="preset-btn" data-units="250">250 units (52.6 kg)</button>
-          <button type="button" class="preset-btn" data-units="475">475 units (100 kg - Exact Old Batch)</button>
-          <button type="button" class="preset-btn active" data-units="500">500 units (105.3 kg)</button>
-          <button type="button" class="preset-btn" data-units="700">700 units (147.4 kg)</button>
+          <span style="font-size:10px; color:#688285; align-self:center; margin-right:4px;">Quick Resin Sizes (kg):</span>
+          <button type="button" class="preset-btn" data-kg="30">30 kg (~142 units)</button>
+          <button type="button" class="preset-btn" data-kg="50">50 kg (~238 units)</button>
+          <button type="button" class="preset-btn" data-kg="100">100 kg (Full Old Stock · ~475 units)</button>
+          <button type="button" class="preset-btn active" data-kg="120">120 kg (Mixed Draw · ~570 units)</button>
+          <button type="button" class="preset-btn" data-kg="200">200 kg (~950 units)</button>
+          <button type="button" class="preset-btn" data-kg="300">300 kg (All Inventory · ~1,425 units)</button>
         </div>
 
         <div id="fifo-demo-output"></div>
@@ -514,22 +516,23 @@ function renderInventory() {
     btn.onclick = () => {
       document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      $('#demo-prod-units').value = btn.dataset.units;
+      $('#demo-prod-kg').value = btn.dataset.kg;
       updateFifo();
     };
   });
 
-  $('#demo-prod-units').oninput = () => {
-    document.querySelectorAll('.preset-btn').forEach(b => b.classList.toggle('active', Number(b.dataset.units) === Number($('#demo-prod-units').value)));
+  $('#demo-prod-kg').oninput = () => {
+    const valKg = Number($('#demo-prod-kg').value);
+    document.querySelectorAll('.preset-btn').forEach(b => b.classList.toggle('active', Number(b.dataset.kg) === valKg));
     updateFifo();
   };
 
   updateFifo();
 }
 
-// FIFO Product Demo - Calculated on Backend API (/api/inventory/fifo-product-demo)
+// FIFO Product Demo - Calculated on Backend API (/api/inventory/fifo-product-demo) in KG
 async function updateFifo() {
-  const units = Number($('#demo-prod-units').value);
+  const kg = Number($('#demo-prod-kg').value);
   const container = $('#fifo-demo-output');
   if (!container) return;
 
@@ -544,7 +547,7 @@ async function updateFifo() {
     const res = await fetch('/api/inventory/fifo-product-demo', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ units, productId: 'B', costingDate, effectiveDate, fx, freight, duty })
+      body: JSON.stringify({ quantityKg: kg, productId: 'B', costingDate, effectiveDate, fx, freight, duty })
     });
     if (res.ok) {
       const json = await res.json();
@@ -556,16 +559,17 @@ async function updateFifo() {
   const p = products.find(x => x.id === 'B') || products[1];
   const grossPerUnit = grossResin(p);
   const convPerUnit = p.other + conversionCost(p);
-  const reqResin = backendData ? backendData.productionRun.grossResinRequired : (units * grossPerUnit);
+
+  const reqResin = backendData ? backendData.productionRun.quantityKg : kg;
+  const units = backendData ? backendData.productionRun.equivalentUnits : (grossPerUnit > 0 ? (reqResin / grossPerUnit) : 0);
 
   const isPostHike = costingDate >= effectiveDate;
   const maxAvailableStock = isPostHike ? 300 : 100;
-  const maxUnits = maxAvailableStock / grossPerUnit;
 
-  if (!Number.isFinite(units) || units <= 0) {
+  if (!Number.isFinite(kg) || kg <= 0) {
     container.innerHTML = `
       <div class="alert" style="background:#fdf2ee; border-color:#f1c2b5; color:#a13b28;">
-        Please enter a valid production batch size of units.
+        Please enter a valid resin quantity in kg (e.g. 120 kg).
       </div>
     `;
     return;
@@ -574,7 +578,7 @@ async function updateFifo() {
   if (reqResin > maxAvailableStock) {
     container.innerHTML = `
       <div class="alert" style="background:#fdf2ee; border-color:#f1c2b5; color:#a13b28;">
-        ⚠️ <b>${units} units require ${reqResin.toFixed(2)} kg resin</b>, which exceeds available stock (${maxAvailableStock} kg) on ${costingDate}. Maximum possible is ~${Math.floor(maxUnits)} units.
+        ⚠️ <b>${reqResin.toFixed(2)} kg resin</b> exceeds available stock (${maxAvailableStock} kg) on ${costingDate}. Maximum possible is ${maxAvailableStock} kg (~${Math.floor(maxAvailableStock / grossPerUnit)} units).
       </div>
     `;
     return;
@@ -589,17 +593,30 @@ async function updateFifo() {
   const freshCostTotal = backendData ? backendData.fifoBreakdown.newBatch.cost : (freshDrawn * newLandedRate);
   const totalMaterialCost = backendData ? backendData.productionRun.totalMaterialCost : (oldCostTotal + freshCostTotal);
   const blendedRatePerKg = backendData ? backendData.productionRun.blendedRatePerKg : (reqResin > 0 ? totalMaterialCost / reqResin : 0);
-  const blendedResinPerUnit = backendData ? backendData.productionRun.blendedResinPerUnit : (totalMaterialCost / units);
+  const blendedResinPerUnit = backendData ? backendData.productionRun.blendedResinPerUnit : (units > 0 ? totalMaterialCost / units : 0);
   const totalCostPerUnit = backendData ? backendData.productionRun.totalCostPerUnit : (blendedResinPerUnit + convPerUnit);
   const profitPerUnit = backendData ? backendData.productionRun.profitPerUnit : (p.sp - totalCostPerUnit);
   const marginPct = backendData ? backendData.productionRun.marginPct : ((profitPerUnit / p.sp) * 100);
 
   const savings = backendData ? backendData.comparisonVsReplacement.savingsPreserved : ((reqResin * newLandedRate) - totalMaterialCost);
-  const replacementUnitCost = backendData ? backendData.comparisonVsReplacement.replacementUnitCost : ((reqResin * newLandedRate / units) + convPerUnit);
+  const replacementUnitCost = backendData ? backendData.comparisonVsReplacement.replacementUnitCost : ((reqResin * newLandedRate / (units || 1)) + convPerUnit);
   const replacementProfit = backendData ? backendData.comparisonVsReplacement.replacementProfit : (p.sp - replacementUnitCost);
   const replacementMargin = backendData ? backendData.comparisonVsReplacement.replacementMarginPct : ((replacementProfit / p.sp) * 100);
 
   container.innerHTML = `
+    <div style="margin-bottom:12px; padding:10px 14px; background:#eef6f5; border:1px solid #cce5e1; border-radius:6px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+      <div>
+        <span style="font-size:11px; text-transform:uppercase; letter-spacing:0.04em; color:#1c4e4c; font-weight:700;">Material Requisition in KG</span>
+        <div style="font-size:14px; color:#123231; font-weight:600;">
+          <b>${reqResin.toFixed(2)} kg</b> resin issued &rarr; yields <b>~${Math.round(units).toLocaleString()} units</b> of Product B
+        </div>
+      </div>
+      <div style="text-align:right;">
+        <span style="font-size:10px; color:#4d7371;">Gross consumption / unit:</span>
+        <div style="font-size:12px; font-weight:700; color:#1c4e4c;">0.2105 kg / connector</div>
+      </div>
+    </div>
+
     <div class="demo-steps-container">
       <div class="demo-step-card old">
         <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -611,7 +628,7 @@ async function updateFifo() {
         </div>
         <p style="font-size:11px; margin:4px 0; color:#385e54;">
           <b>${oldDrawn.toFixed(2)} kg</b> drawn at older baseline price of <b>${money(baseline)} / kg</b>.
-          ${oldDrawn >= 100 ? '<i>(Exhausts all 100 kg of older stock).</i>' : `<i>(${ (100 - oldDrawn).toFixed(2) } kg still remains in old stock).</i>`}
+          ${oldDrawn >= 100 ? '<i>(Exhausts all 100.00 kg of older stock).</i>' : `<i>(${ (100 - oldDrawn).toFixed(2) } kg still remains in older stock).</i>`}
         </p>
       </div>
 
@@ -637,7 +654,7 @@ async function updateFifo() {
           <b style="font-size:16px; color:#173b3c;">${money(totalMaterialCost)}</b>
         </div>
         <p style="font-size:11px; margin:4px 0; color:#315456;">
-          Blended Material Rate: <b>${money(blendedRatePerKg)} / kg</b> · Blended Resin Cost per Unit: <b>${money(blendedResinPerUnit)} / unit</b>.
+          Blended Material Rate: <b>${money(blendedRatePerKg)} / kg</b> &middot; Blended Resin Cost per Unit: <b>${money(blendedResinPerUnit)} / unit</b>.
         </p>
       </div>
     </div>
@@ -670,9 +687,9 @@ async function updateFifo() {
 
     <div class="alert" style="background:#f4fbf8; border-color:#bce5d8; color:#184a3c; margin-top:14px; font-size:12px; line-height:1.7;">
       💡 <b>The Demonstration Insight (Why Finance Could Not Tell at First):</b><br>
-      • Because <b>older stock keeps the old price (${money(baseline)}/kg)</b>, this production run of ${units} units still appears profitable with a <b>+${marginPct.toFixed(2)}% gross margin</b> (+${money(profitPerUnit)}/unit profit).<br>
-      • <b>The Hidden Trap</b>: Once this run consumes the remaining older stock, the very next batch must be produced entirely using new stock @ <b>${money(newLandedRate)}/kg</b>.<br>
-      • Unit cost then jumps immediately to <b>${money(replacementUnitCost)}</b>, exceeding the selling price (${money(p.sp)}) and collapsing into a permanent <b style="color:#b24c38;">${replacementMargin.toFixed(2)}% net loss (${money(replacementProfit)} / unit)</b>!
+      &bull; Because <b>older stock keeps the old price (${money(baseline)}/kg)</b>, this production requisition of <b>${reqResin.toFixed(2)} kg (~${Math.round(units)} units)</b> still appears profitable with a <b>+${marginPct.toFixed(2)}% gross margin</b> (+${money(profitPerUnit)}/unit profit).<br>
+      &bull; <b>The Hidden Trap</b>: Once this run consumes the remaining older stock, any future requisition must be produced entirely using new stock @ <b>${money(newLandedRate)}/kg</b>.<br>
+      &bull; Unit cost then jumps immediately to <b>${money(replacementUnitCost)}</b>, exceeding the selling price (${money(p.sp)}) and collapsing into a permanent <b style="color:#b24c38;">${replacementMargin.toFixed(2)}% net loss (${money(replacementProfit)} / unit)</b>!
     </div>
   `;
 }
