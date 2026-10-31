@@ -377,13 +377,33 @@ function renderProducts() {
   `).join('') + '</div>';
 
   $('#products').querySelectorAll('input').forEach(el => {
-    el.onchange = () => {
+    el.onchange = async () => {
       if (!el.checkValidity() || el.value === '') {
         el.reportValidity();
         return;
       }
-      products.find(p => p.id === el.dataset.id)[el.dataset.key] = Number(el.value);
+      const prod = products.find(p => p.id === el.dataset.id);
+      prod[el.dataset.key] = Number(el.value);
       render();
+
+      // Persist change to Neon PostgreSQL
+      try {
+        const payloadKeyMap = {
+          sp: 'sp',
+          qty: 'qty',
+          scrap: 'scrap',
+          other: 'other',
+          labour: 'labour',
+          machine: 'machine',
+          packaging: 'packaging',
+          sterilisation: 'sterilisation'
+        };
+        await fetch(`/api/products/${prod.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ [payloadKeyMap[el.dataset.key]]: Number(el.value) })
+        });
+      } catch (e) {}
     };
   });
 }
@@ -847,3 +867,27 @@ $('#method').innerHTML = `
 
 // Initial Render
 render();
+
+// Sync with Backend Neon PostgreSQL API
+async function syncFromBackend() {
+  try {
+    const res = await fetch('/api/products');
+    if (res.ok) {
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data) && json.data.length) {
+        json.data.forEach(dbProd => {
+          const local = products.find(p => p.id === dbProd.id);
+          if (local) {
+            Object.assign(local, dbProd);
+          }
+        });
+        render();
+        console.log('✅ Synchronized products with Neon PostgreSQL database');
+      }
+    }
+  } catch (e) {
+    // Client works offline if backend is unreachable
+  }
+}
+
+syncFromBackend();
