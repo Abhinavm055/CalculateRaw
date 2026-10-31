@@ -350,7 +350,7 @@ h2 {
 /* Portfolio Product Margin Comparison Cards */
 .product-cards-overview {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 16px;
   margin-top: 20px;
 }
@@ -829,7 +829,7 @@ footer span {
 }
 .detailgrid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 20px;
 }
 .detailgrid .panel {
@@ -840,6 +840,93 @@ footer span {
   border: 1px solid #dbe5e3;
   padding: 5px;
   border-radius: 4px;
+}
+
+/* Add Product Form */
+.add-product-panel {
+  background: #ffffff;
+  border: 1px solid #c8dfd8;
+  border-left: 5px solid #1c4e4c;
+  border-radius: 8px;
+  padding: 22px 24px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 14px rgba(28, 78, 76, 0.08);
+}
+.add-product-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px 18px;
+  margin: 16px 0;
+}
+.add-product-field label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #315854;
+  margin-bottom: 5px;
+}
+.add-product-field input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #cbdcd8;
+  border-radius: 5px;
+  font-size: 13px;
+  color: #172d30;
+  background: #fff;
+  transition: border-color 0.15s ease;
+}
+.add-product-field input:focus {
+  border-color: #2e8b75;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(46, 139, 117, 0.15);
+}
+.btn-primary {
+  background: #1c4e4c;
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  padding: 9px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.btn-primary:hover {
+  background: #153c3a;
+  transform: translateY(-1px);
+}
+.btn-secondary {
+  background: #eef4f2;
+  color: #27524e;
+  border: 1px solid #c2ded7;
+  border-radius: 6px;
+  padding: 9px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn-secondary:hover {
+  background: #e2edea;
+}
+.btn-delete-prod {
+  background: none;
+  border: 1px solid #eccbc4;
+  color: #b24c38;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.btn-delete-prod:hover {
+  background: #fdf2ef;
+  border-color: #d99c8f;
 }
 .guide {
   max-width: 850px;

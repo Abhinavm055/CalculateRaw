@@ -360,52 +360,273 @@ async function render() {
   });
 }
 
-function renderProducts() {
-  $('#products').innerHTML = '<div class="detailgrid">' + products.map(p => `
-    <section class="panel" id="card${p.id}">
-      <span class="eyebrow">PRODUCT ${p.id}</span>
-      <h2>${p.name}</h2>
-      <p>Edit inputs per finished unit. Changes auto-save to Neon PostgreSQL.</p>
-      <table>
-        <tbody>
-          ${[
-            ['Net resin · kg', 'qty'],
-            ['Scrap loss · %', 'scrap'],
-            ['Other BOM materials · ₹', 'other'],
-            ['Labour · ₹', 'labour'],
-            ['Machine · ₹', 'machine'],
-            ['Packaging · ₹', 'packaging'],
-            ['Sterilisation · ₹', 'sterilisation'],
-            ['Selling price · ₹', 'sp']
-          ].map(([label, key]) => `
-            <tr>
-              <td><label for="${p.id + key}">${label}</label></td>
-              <td>
-                <input id="${p.id + key}" data-id="${p.id}" data-key="${key}" type="number"
-                  min="${key === 'sp' ? 0.01 : 0}"
-                  ${key === 'scrap' ? 'max="99.99"' : ''}
-                  step="any" value="${p[key]}">
-              </td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-      <div class="landed">
-        <span>Current standard cost</span>
-        <strong>${money(cost(p, rate))}</strong>
-      </div>
-      <p>Gross resin input after scrap: <b>${grossResin(p).toFixed(6)} kg</b></p>
-      <p>Gross margin: <b style="color:${margin(p, rate) < 0 ? '#b24c38' : '#276953'};">${margin(p, rate).toFixed(2)}%</b></p>
-    </section>
-  `).join('') + '</div>';
+let isAddProductOpen = false;
 
-  $('#products').querySelectorAll('input').forEach(el => {
+function getNextSuggestedId() {
+  const existingIds = new Set(products.map(p => p.id.toUpperCase()));
+  for (let i = 65; i <= 90; i++) {
+    const candidate = String.fromCharCode(i);
+    if (!existingIds.has(candidate)) return candidate;
+  }
+  return `P${products.length + 1}`;
+}
+
+function renderProducts() {
+  const nextId = getNextSuggestedId();
+
+  $('#products').innerHTML = `
+    <!-- Top Action Bar -->
+    <div class="panel" style="margin-bottom:20px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+      <div>
+        <span class="eyebrow">BILL OF MATERIALS (BOM) & COST INPUTS</span>
+        <h2 style="margin:2px 0 4px;">Finished Products Master Register (${products.length} Products)</h2>
+        <p style="margin:0; color:#527471; font-size:12px;">
+          Edit product BOM specifications or add new products. Changes and additions are immediately stored in the Neon PostgreSQL database.
+        </p>
+      </div>
+      <div>
+        <button id="btn-toggle-add-product" class="btn-primary" type="button">
+          ${isAddProductOpen ? '✕ Close Form' : '+ Add New Product'}
+        </button>
+      </div>
+    </div>
+
+    <!-- Collapsible Add New Product Form Panel -->
+    <div id="add-product-container" style="${isAddProductOpen ? 'display:block;' : 'display:none;'}">
+      <section class="add-product-panel">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <span class="eyebrow" style="color:#1d5b4c;">NEW PRODUCT SETUP</span>
+            <h3 style="margin:2px 0; font-size:15px; color:#123530;">Add New Product to Neon PostgreSQL</h3>
+          </div>
+          <span class="badge active">Database Connected</span>
+        </div>
+        <p style="font-size:12px; color:#4e6d68; margin:6px 0 16px;">
+          Fill in the BOM parameters below. The backend will calculate its landed resin cost, conversion overheads, and margin dynamically.
+        </p>
+
+        <form id="form-add-product">
+          <div class="add-product-grid">
+            <div class="add-product-field">
+              <label for="new-prod-id">Product ID / Code</label>
+              <input id="new-prod-id" type="text" maxlength="10" placeholder="e.g. ${nextId}" value="${nextId}" required>
+            </div>
+            <div class="add-product-field" style="grid-column: span 2;">
+              <label for="new-prod-name">Product Name & Description</label>
+              <input id="new-prod-name" type="text" placeholder="e.g. Product ${nextId}: Infusion Spike" required>
+            </div>
+            <div class="add-product-field">
+              <label for="new-prod-sp">Selling Price (₹)</label>
+              <input id="new-prod-sp" type="number" min="0.01" step="any" placeholder="e.g. 50.00" required>
+            </div>
+            <div class="add-product-field">
+              <label for="new-prod-qty">Net PP Resin (kg)</label>
+              <input id="new-prod-qty" type="number" min="0.0001" step="any" placeholder="e.g. 0.12" required>
+            </div>
+            <div class="add-product-field">
+              <label for="new-prod-scrap">Scrap Loss (%)</label>
+              <input id="new-prod-scrap" type="number" min="0" max="99.99" step="any" value="5" required>
+            </div>
+            <div class="add-product-field">
+              <label for="new-prod-other">Other Materials (₹)</label>
+              <input id="new-prod-other" type="number" min="0" step="any" value="5.00" required>
+            </div>
+            <div class="add-product-field">
+              <label for="new-prod-labour">Labour Cost (₹)</label>
+              <input id="new-prod-labour" type="number" min="0" step="any" value="4.00" required>
+            </div>
+            <div class="add-product-field">
+              <label for="new-prod-machine">Machine Cost (₹)</label>
+              <input id="new-prod-machine" type="number" min="0" step="any" value="3.00" required>
+            </div>
+            <div class="add-product-field">
+              <label for="new-prod-packaging">Packaging Cost (₹)</label>
+              <input id="new-prod-packaging" type="number" min="0" step="any" value="2.00" required>
+            </div>
+            <div class="add-product-field">
+              <label for="new-prod-sterilisation">Sterilisation Cost (₹)</label>
+              <input id="new-prod-sterilisation" type="number" min="0" step="any" value="1.00" required>
+            </div>
+          </div>
+
+          <div id="add-prod-status" style="margin:10px 0; display:none;"></div>
+
+          <div style="display:flex; gap:10px; align-items:center; margin-top:16px;">
+            <button id="btn-save-new-product" type="submit" class="btn-primary">
+              ✓ Save Product to Database
+            </button>
+            <button id="btn-cancel-add-product" type="button" class="btn-secondary">
+              Cancel
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <!-- Product Cards Grid -->
+    <div class="detailgrid">
+      ${products.map(p => `
+        <section class="panel" id="card${p.id}">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+            <div>
+              <span class="eyebrow">PRODUCT ${p.id}</span>
+              <h2 style="margin:2px 0 4px;">${p.name}</h2>
+            </div>
+            ${!['A', 'B', 'C'].includes(p.id) ? `
+              <button type="button" class="btn-delete-prod" data-del-id="${p.id}" title="Delete from Database">
+                🗑 Delete
+              </button>
+            ` : ''}
+          </div>
+          <p style="font-size:12px; color:#5b777a; margin:4px 0 12px;">Edit inputs per finished unit. Changes auto-save to Neon PostgreSQL.</p>
+          <table>
+            <tbody>
+              ${[
+                ['Net resin · kg', 'qty'],
+                ['Scrap loss · %', 'scrap'],
+                ['Other BOM materials · ₹', 'other'],
+                ['Labour · ₹', 'labour'],
+                ['Machine · ₹', 'machine'],
+                ['Packaging · ₹', 'packaging'],
+                ['Sterilisation · ₹', 'sterilisation'],
+                ['Selling price · ₹', 'sp']
+              ].map(([label, key]) => `
+                <tr>
+                  <td><label for="${p.id + key}">${label}</label></td>
+                  <td>
+                    <input id="${p.id + key}" data-id="${p.id}" data-key="${key}" type="number"
+                      min="${key === 'sp' ? 0.01 : 0}"
+                      ${key === 'scrap' ? 'max="99.99"' : ''}
+                      step="any" value="${p[key]}">
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          <div class="landed">
+            <span>Current standard cost</span>
+            <strong>${money(cost(p, rate))}</strong>
+          </div>
+          <p>Gross resin input after scrap: <b>${grossResin(p).toFixed(6)} kg</b></p>
+          <p>Gross margin: <b style="color:${margin(p, rate) < 0 ? '#b24c38' : '#276953'};">${margin(p, rate).toFixed(2)}%</b></p>
+        </section>
+      `).join('')}
+    </div>
+  `;
+
+  // Attach button toggle
+  const toggleBtn = $('#btn-toggle-add-product');
+  if (toggleBtn) {
+    toggleBtn.onclick = () => {
+      isAddProductOpen = !isAddProductOpen;
+      renderProducts();
+    };
+  }
+
+  const cancelBtn = $('#btn-cancel-add-product');
+  if (cancelBtn) {
+    cancelBtn.onclick = () => {
+      isAddProductOpen = false;
+      renderProducts();
+    };
+  }
+
+  // Attach Add Product Form submit
+  const addForm = $('#form-add-product');
+  if (addForm) {
+    addForm.onsubmit = async (e) => {
+      e.preventDefault();
+      const statusDiv = $('#add-prod-status');
+      const submitBtn = $('#btn-save-new-product');
+
+      const id = $('#new-prod-id').value.trim().toUpperCase();
+      const name = $('#new-prod-name').value.trim();
+      const sp = Number($('#new-prod-sp').value);
+      const qty = Number($('#new-prod-qty').value);
+      const scrap = Number($('#new-prod-scrap').value);
+      const other = Number($('#new-prod-other').value);
+      const labour = Number($('#new-prod-labour').value);
+      const machine = Number($('#new-prod-machine').value);
+      const packaging = Number($('#new-prod-packaging').value);
+      const sterilisation = Number($('#new-prod-sterilisation').value);
+
+      if (!name || sp <= 0 || qty <= 0) {
+        statusDiv.style.display = 'block';
+        statusDiv.className = 'alert';
+        statusDiv.style.background = '#fdf2ee';
+        statusDiv.style.color = '#a13b28';
+        statusDiv.textContent = 'Please fill out all required fields with valid positive numbers.';
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Saving to Database...';
+
+      try {
+        const res = await fetch('/api/products', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, name, sp, qty, scrap, other, labour, machine, packaging, sterilisation })
+        });
+        const json = await res.json();
+        if (res.ok && json.success) {
+          statusDiv.style.display = 'block';
+          statusDiv.className = 'alert';
+          statusDiv.style.background = '#edf7f4';
+          statusDiv.style.color = '#185040';
+          statusDiv.textContent = `✓ Product ${json.data.id} (${json.data.name}) stored in Neon PostgreSQL! Updating dashboard...`;
+
+          isAddProductOpen = false;
+          await syncFromBackend();
+        } else {
+          statusDiv.style.display = 'block';
+          statusDiv.className = 'alert';
+          statusDiv.style.background = '#fdf2ee';
+          statusDiv.style.color = '#a13b28';
+          statusDiv.textContent = `Error: ${json.message || 'Failed to save product.'}`;
+          submitBtn.disabled = false;
+          submitBtn.textContent = '✓ Save Product to Database';
+        }
+      } catch (err) {
+        statusDiv.style.display = 'block';
+        statusDiv.className = 'alert';
+        statusDiv.style.background = '#fdf2ee';
+        statusDiv.style.color = '#a13b28';
+        statusDiv.textContent = `Network error: ${err.message}`;
+        submitBtn.disabled = false;
+        submitBtn.textContent = '✓ Save Product to Database';
+      }
+    };
+  }
+
+  // Attach Delete Product handlers
+  $('#products').querySelectorAll('.btn-delete-prod').forEach(delBtn => {
+    delBtn.onclick = async () => {
+      const delId = delBtn.dataset.delId;
+      if (!confirm(`Are you sure you want to delete Product ${delId} from the database?`)) return;
+      try {
+        const res = await fetch(`/api/products/${delId}`, { method: 'DELETE' });
+        if (res.ok) {
+          await syncFromBackend();
+        } else {
+          const json = await res.json();
+          alert(json.message || 'Error deleting product');
+        }
+      } catch (e) {
+        alert('Network error deleting product: ' + e.message);
+      }
+    };
+  });
+
+  // Attach input change handlers for BOM edits
+  $('#products').querySelectorAll('input[data-key]').forEach(el => {
     el.onchange = async () => {
       if (!el.checkValidity() || el.value === '') {
         el.reportValidity();
         return;
       }
       const prod = products.find(p => p.id === el.dataset.id);
+      if (!prod) return;
       prod[el.dataset.key] = Number(el.value);
       render();
 
@@ -870,14 +1091,10 @@ async function syncFromBackend() {
     if (res.ok) {
       const json = await res.json();
       if (json.success && Array.isArray(json.data) && json.data.length) {
-        json.data.forEach(dbProd => {
-          const local = products.find(p => p.id === dbProd.id);
-          if (local) {
-            Object.assign(local, dbProd);
-          }
-        });
+        products.length = 0;
+        json.data.forEach(dbProd => products.push(dbProd));
         render();
-        console.log('✅ Synchronized products with Neon PostgreSQL database');
+        console.log(`✅ Synchronized ${products.length} products with Neon PostgreSQL database`);
       }
     }
   } catch (e) {

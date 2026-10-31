@@ -96,6 +96,107 @@ app.put('/api/products/:id', async (req, res) => {
   }
 });
 
+// Create New Product in PostgreSQL
+app.post('/api/products', async (req, res) => {
+  try {
+    let {
+      id,
+      name,
+      sp,
+      qty,
+      scrap = 5.0,
+      other = 0.0,
+      labour = 0.0,
+      machine = 0.0,
+      packaging = 0.0,
+      sterilisation = 0.0
+    } = req.body;
+
+    if (!name || name.trim() === '') {
+      return res.status(400).json({ success: false, message: 'Product name is required.' });
+    }
+
+    if (sp === undefined || sp === null || Number(sp) <= 0) {
+      return res.status(400).json({ success: false, message: 'Valid selling price (SP > 0) is required.' });
+    }
+
+    if (qty === undefined || qty === null || Number(qty) <= 0) {
+      return res.status(400).json({ success: false, message: 'Valid net resin quantity (qty > 0) is required.' });
+    }
+
+    // Auto-generate ID if omitted
+    if (!id || id.trim() === '') {
+      const existing = await query('SELECT id FROM products');
+      const existingIds = new Set(existing.rows.map(r => r.id.toUpperCase()));
+      for (let i = 65; i <= 90; i++) {
+        const candidate = String.fromCharCode(i);
+        if (!existingIds.has(candidate)) {
+          id = candidate;
+          break;
+        }
+      }
+      if (!id) id = `P${Date.now().toString().slice(-4)}`;
+    } else {
+      id = id.trim().toUpperCase();
+    }
+
+    const insertRes = await query(`
+      INSERT INTO products (
+        id, name, selling_price, net_resin_qty, scrap_pct,
+        other_materials_inr, labour_inr, machine_inr, packaging_inr, sterilisation_inr
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      RETURNING *;
+    `, [
+      id,
+      name.trim(),
+      Number(sp),
+      Number(qty),
+      Number(scrap) || 0,
+      Number(other) || 0,
+      Number(labour) || 0,
+      Number(machine) || 0,
+      Number(packaging) || 0,
+      Number(sterilisation) || 0
+    ]);
+
+    const r = insertRes.rows[0];
+    const created = {
+      id: r.id,
+      name: r.name,
+      sp: Number(r.selling_price),
+      qty: Number(r.net_resin_qty),
+      scrap: Number(r.scrap_pct),
+      other: Number(r.other_materials_inr),
+      labour: Number(r.labour_inr),
+      machine: Number(r.machine_inr),
+      packaging: Number(r.packaging_inr),
+      sterilisation: Number(r.sterilisation_inr)
+    };
+
+    res.status(201).json({ success: true, message: 'Product added successfully', data: created });
+  } catch (err) {
+    if (err.code === '23505') {
+      return res.status(409).json({ success: false, message: `Product with ID '${req.body.id}' already exists in database.` });
+    }
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Delete Product from PostgreSQL
+app.delete('/api/products/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const delRes = await query('DELETE FROM products WHERE id = $1 RETURNING *;', [id]);
+    if (delRes.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Product not found.' });
+    }
+    res.json({ success: true, message: `Product ${id} deleted successfully.`, data: delRes.rows[0] });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // 3. Price History API
 app.get('/api/price-history', async (req, res) => {
   try {
