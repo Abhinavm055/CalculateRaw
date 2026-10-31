@@ -91,7 +91,7 @@ async function render() {
     landedCalcBox.className = `landed-calc-box ${isPostHike ? '' : 'pre-hike'}`;
     landedCalcBox.innerHTML = `
       <div class="calc-title">
-        ${isPostHike ? '● Price Hike Active (+12% from ' + effectiveDate + ')' : '○ Baseline Active (Prior to ' + effectiveDate + ')'} · USD @ ₹${fx.toFixed(1)} [Backend Computed]
+        ${isPostHike ? '● Price Hike Active (+12% from ' + effectiveDate + ')' : '○ Baseline Active (Prior to ' + effectiveDate + ')'} · USD @ ₹${fx.toFixed(1)}
       </div>
       <div class="calc-formula">
         Landed Cost / kg = [ ( Supplier USD × FX Rate ) + Freight ] × ( 1 + Duty % / 100 )
@@ -178,7 +178,7 @@ async function render() {
 
           <div class="cost-breakdown-subgrid">
             <div class="cost-sub-item">
-              <label>Raw Resin Cost [Backend]</label>
+              <label>Raw Resin Cost</label>
               <b><s>${money(baseResin)}</s> → ${money(currResin)}</b>
               <span class="delta-tag ${resinDelta > 0 ? 'neg' : 'pos'}" style="display:inline-block; margin-top:2px;">
                 ${resinDelta > 0 ? '+' : ''}${money(resinDelta)} (${resinDeltaPct.toFixed(1)}%)
@@ -381,7 +381,7 @@ function renderProducts() {
         <span class="eyebrow">BILL OF MATERIALS (BOM) & COST INPUTS</span>
         <h2 style="margin:2px 0 4px;">Finished Products Master Register (${products.length} Products)</h2>
         <p style="margin:0; color:#527471; font-size:12px;">
-          Edit product BOM specifications or add new products. Changes and additions are immediately stored in the Neon PostgreSQL database.
+          Edit product BOM specifications or add new products. Changes and additions are saved automatically.
         </p>
       </div>
       <div>
@@ -397,12 +397,12 @@ function renderProducts() {
         <div style="display:flex; justify-content:space-between; align-items:center;">
           <div>
             <span class="eyebrow" style="color:#1d5b4c;">NEW PRODUCT SETUP</span>
-            <h3 style="margin:2px 0; font-size:15px; color:#123530;">Add New Product to Neon PostgreSQL</h3>
+            <h3 style="margin:2px 0; font-size:15px; color:#123530;">Add New Finished Product</h3>
           </div>
-          <span class="badge active">Database Connected</span>
+          <span class="badge active">Product Specification</span>
         </div>
         <p style="font-size:12px; color:#4e6d68; margin:6px 0 16px;">
-          Fill in the BOM parameters below. The backend will calculate its landed resin cost, conversion overheads, and margin dynamically.
+          Fill in the BOM parameters below to calculate landed resin cost, conversion overheads, and profit margin in real time.
         </p>
 
         <form id="form-add-product">
@@ -453,7 +453,7 @@ function renderProducts() {
 
           <div style="display:flex; gap:10px; align-items:center; margin-top:16px;">
             <button id="btn-save-new-product" type="submit" class="btn-primary">
-              ✓ Save Product to Database
+              ✓ Save Product
             </button>
             <button id="btn-cancel-add-product" type="button" class="btn-secondary">
               Cancel
@@ -473,12 +473,12 @@ function renderProducts() {
               <h2 style="margin:2px 0 4px;">${p.name}</h2>
             </div>
             ${!['A', 'B', 'C'].includes(p.id) ? `
-              <button type="button" class="btn-delete-prod" data-del-id="${p.id}" title="Delete from Database">
+              <button type="button" class="btn-delete-prod" data-del-id="${p.id}" title="Delete Product">
                 🗑 Delete
               </button>
             ` : ''}
           </div>
-          <p style="font-size:12px; color:#5b777a; margin:4px 0 12px;">Edit inputs per finished unit. Changes auto-save to Neon PostgreSQL.</p>
+          <p style="font-size:12px; color:#5b777a; margin:4px 0 12px;">Edit inputs per finished unit. Changes auto-save in real time.</p>
           <table>
             <tbody>
               ${[
@@ -560,7 +560,7 @@ function renderProducts() {
       }
 
       submitBtn.disabled = true;
-      submitBtn.textContent = 'Saving to Database...';
+      submitBtn.textContent = 'Saving Product...';
 
       try {
         const res = await fetch('/api/products', {
@@ -574,7 +574,7 @@ function renderProducts() {
           statusDiv.className = 'alert';
           statusDiv.style.background = '#edf7f4';
           statusDiv.style.color = '#185040';
-          statusDiv.textContent = `✓ Product ${json.data.id} (${json.data.name}) stored in Neon PostgreSQL! Updating dashboard...`;
+          statusDiv.textContent = `✓ Product ${json.data.id} (${json.data.name}) saved successfully! Updating dashboard...`;
 
           isAddProductOpen = false;
           await syncFromBackend();
@@ -585,7 +585,7 @@ function renderProducts() {
           statusDiv.style.color = '#a13b28';
           statusDiv.textContent = `Error: ${json.message || 'Failed to save product.'}`;
           submitBtn.disabled = false;
-          submitBtn.textContent = '✓ Save Product to Database';
+          submitBtn.textContent = '✓ Save Product';
         }
       } catch (err) {
         statusDiv.style.display = 'block';
@@ -594,7 +594,7 @@ function renderProducts() {
         statusDiv.style.color = '#a13b28';
         statusDiv.textContent = `Network error: ${err.message}`;
         submitBtn.disabled = false;
-        submitBtn.textContent = '✓ Save Product to Database';
+        submitBtn.textContent = '✓ Save Product';
       }
     };
   }
@@ -603,7 +603,7 @@ function renderProducts() {
   $('#products').querySelectorAll('.btn-delete-prod').forEach(delBtn => {
     delBtn.onclick = async () => {
       const delId = delBtn.dataset.delId;
-      if (!confirm(`Are you sure you want to delete Product ${delId} from the database?`)) return;
+      if (!confirm(`Are you sure you want to delete Product ${delId}?`)) return;
       try {
         const res = await fetch(`/api/products/${delId}`, { method: 'DELETE' });
         if (res.ok) {
@@ -669,9 +669,9 @@ function renderInventory() {
           <span class="eyebrow">FIFO INVENTORY DEMO</span>
           <h2>One Raw Material Price Change Demo (Product B: Medical Connector)</h2>
         </div>
-        <span class="badge active">Backend Computed</span>
+        <span class="badge active">Live Allocation</span>
       </div>
-      <p>Demonstrating how <b>one raw material (Polypropylene Resin)</b> price changes from <b>01-Nov-2026</b>, while older stock keeps the older price, calculated via backend Express API and Neon database.</p>
+      <p>Demonstrating how <b>one raw material (Polypropylene Resin)</b> price changes from <b>01-Nov-2026</b>, while older warehouse inventory keeps the historical purchase price under FIFO allocation.</p>
 
       <div class="demo-batch-grid">
         <div class="demo-batch-card old">
@@ -684,7 +684,7 @@ function renderInventory() {
             Available Stock: <b>100.00 kg</b><br>
             Landed Cost: <b>${money(baseline)} / kg</b> (Baseline USD $2.00 @ ₹${fx})
           </div>
-          <small style="color:#577e74;">Capitalized at historical cost in Neon database.</small>
+          <small style="color:#577e74;">Capitalized at historical purchase cost.</small>
         </div>
 
         <div class="demo-batch-card new">
@@ -704,7 +704,7 @@ function renderInventory() {
       <div class="demo-run-box">
         <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:10px;">
           <div>
-            <span class="eyebrow">BACKEND DEMONSTRATION ENGINE</span>
+            <span class="eyebrow">FIFO INVENTORY REQUISITION</span>
             <h3 style="margin:4px 0 2px; font-size:16px;">Product B: Medical Connector Material Issue (FIFO)</h3>
             <p style="font-size:11px; margin:0; color:#5b777a;">
               Enter raw material requisition in <b>kg</b> (standard warehouse issue). Each connector requires <b>0.20 kg net resin</b> (5% scrap &rarr; <b>0.2105 kg gross</b>). Selling Price: <b>₹74.00</b>.
@@ -842,7 +842,7 @@ async function updateFifo() {
       <div class="demo-step-card old">
         <div style="display:flex; justify-content:space-between; align-items:center;">
           <div>
-            <span class="eyebrow" style="color:#2a7460;">STEP 1: CONSUME OLDER STOCK (KEEPS OLD PRICE) [BACKEND]</span>
+            <span class="eyebrow" style="color:#2a7460;">STEP 1: CONSUME OLDER STOCK (KEEPS OLD PRICE)</span>
             <h4 style="margin:2px 0; font-size:13px; color:#184239;">Older Batch PP-OLD (Received Pre-Hike)</h4>
           </div>
           <b style="font-size:14px; color:#1e5b4c;">${money(oldCostTotal)}</b>
@@ -856,7 +856,7 @@ async function updateFifo() {
       <div class="demo-step-card new">
         <div style="display:flex; justify-content:space-between; align-items:center;">
           <div>
-            <span class="eyebrow" style="color:#9e4632;">STEP 2: DRAW NEW STOCK FOR RESIDUAL BALANCE [BACKEND]</span>
+            <span class="eyebrow" style="color:#9e4632;">STEP 2: DRAW NEW STOCK FOR RESIDUAL BALANCE</span>
             <h4 style="margin:2px 0; font-size:13px; color:#4a231b;">New Scenario Batch PP-NEW (From 01-Nov-2026)</h4>
           </div>
           <b style="font-size:14px; color:#9c3821;">${money(freshCostTotal)}</b>
@@ -869,7 +869,7 @@ async function updateFifo() {
       <div class="demo-step-card total">
         <div style="display:flex; justify-content:space-between; align-items:center;">
           <div>
-            <span class="eyebrow" style="color:#1d4b4a;">STEP 3: TOTAL MATERIAL ISSUE (COMPUTED ON BACKEND)</span>
+            <span class="eyebrow" style="color:#1d4b4a;">STEP 3: TOTAL MATERIAL ISSUE</span>
             <h4 style="margin:2px 0; font-size:13px; color:#173b3c;">Combined ${reqResin.toFixed(2)} kg Gross Resin</h4>
           </div>
           <b style="font-size:16px; color:#173b3c;">${money(totalMaterialCost)}</b>
@@ -968,7 +968,7 @@ $('#export').onclick = () => {
   const baseRate = landed(2.00, fx, freight, duty);
 
   const rows = [
-    ['CalculateRaw Manufacturing Total Cost & Margin Report (Backend Sourced)'],
+    ['CalculateRaw Manufacturing Total Cost & Margin Report'],
     ['Generated On', new Date().toISOString()],
     ['Costing Date', costingDate],
     ['Baseline Landed Resin Cost / kg', baseRate.toFixed(4)],
@@ -1049,8 +1049,8 @@ $('#export').onclick = () => {
 $('#method').innerHTML = `
   <section class="panel guide">
     <span class="eyebrow">MATHEMATICAL PRINCIPLES & GOVERNANCE</span>
-    <h2>How CalculateRaw Builds Product Costs (Backend Node.js API + Neon DB)</h2>
-    <p>This engine resolves the question of why finance could not tell which product lost margin when imported resin prices increased by 12% on 01-Nov-2026. All calculations are handled on the backend.</p>
+    <h2>How CalculateRaw Builds Product Standard Costs</h2>
+    <p>This engine resolves the question of why finance could not tell which product lost margin when imported resin prices increased by 12% on 01-Nov-2026, revealing the true cost build-up and margin impact.</p>
 
     <h2>1. Imported Landed Cost Equation (Baseline FX = 96)</h2>
     <p>Raw polypropylene (PP) resin is purchased in USD. The landed cost includes the USD contract price converted at current exchange rates (baseline ₹96/USD), plus freight, plus customs import duties applied to CIF value:</p>
@@ -1077,7 +1077,7 @@ $('#method').innerHTML = `
     <p>Product B (Medical Connector) had the highest resin intensity (0.20 kg net, 0.2105 kg gross) and resin accounts for <b>68.5% of its total manufacturing cost</b>. At baseline (FX 96), its cost was ₹70.78 against an SP of ₹74.00 (+4.35% margin). When resin increased by 12%, Product B absorbed a cost increase of <b>+₹5.34 per unit</b>, elevating its cost to <b>₹76.11</b>, exceeding its selling price of <b>₹74.00</b> (resulting in a <b>-2.86% gross margin loss</b>).</p>
 
     <h2>5. FIFO Inventory Valuation & Effective Date</h2>
-    <p>While the standard replacement cost updates on 01-Nov-2026, existing warehouse stock received before 01-Nov-2026 (Batch PP-OLD) retains its historical valuation of ₹222.20/kg in PostgreSQL. As production draws inventory, FIFO dispenses the older lot first, preserving balance sheet integrity.</p>
+    <p>While the standard replacement cost updates on 01-Nov-2026, existing warehouse stock received before 01-Nov-2026 (Batch PP-OLD) retains its historical valuation of ₹222.20/kg. As production draws inventory, FIFO dispenses the older lot first, preserving balance sheet integrity.</p>
   </section>
 `;
 
