@@ -248,7 +248,144 @@ app.get('/api/inventory/batches', async (req, res) => {
   }
 });
 
-// 6. Interactive FIFO Issue Allocation API
+// 6. Interactive Product FIFO Demo Allocation API (Calculated on Backend)
+app.post('/api/inventory/fifo-product-demo', async (req, res) => {
+  try {
+    const {
+      units = 500,
+      productId = 'B',
+      costingDate = '2026-11-01',
+      effectiveDate = '2026-11-01',
+      fx = 96.0,
+      freight = 10.0,
+      duty = 10.0
+    } = req.body;
+
+    const u = Number(units);
+    if (!Number.isFinite(u) || u <= 0) {
+      return res.status(400).json({ success: false, message: 'Invalid production units.' });
+    }
+
+    // Retrieve Product from Database
+    const prodRes = await query('SELECT * FROM products WHERE id = $1', [productId]);
+    if (prodRes.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Product not found.' });
+    }
+
+    const r = prodRes.rows[0];
+    const p = {
+      id: r.id,
+      name: r.name,
+      sp: Number(r.selling_price),
+      qty: Number(r.net_resin_qty),
+      scrap: Number(r.scrap_pct),
+      other: Number(r.other_materials_inr),
+      labour: Number(r.labour_inr),
+      machine: Number(r.machine_inr),
+      packaging: Number(r.packaging_inr),
+      sterilisation: Number(r.sterilisation_inr)
+    };
+
+    const grossPerUnit = grossResin(p);
+    const convPerUnit = p.other + conversionCost(p);
+    const reqResin = u * grossPerUnit;
+
+    // Check price hike status
+    const isPostHike = costingDate >= effectiveDate;
+    const supplierUSD = isPostHike ? 2.00 * 1.12 : 2.00;
+    const scenarioLandedRate = landed(supplierUSD, fx, freight, duty);
+    const baselineLandedRate = landed(2.00, fx, freight, duty);
+
+    // Fetch batches from Database
+    const batchesRes = await query('SELECT * FROM inventory_batches ORDER BY receipt_date ASC');
+    const oldBatchRow = batchesRes.rows[0] || { available_qty: 100, unit_landed_cost: baselineLandedRate };
+    const freshBatchRow = batchesRes.rows[1] || { available_qty: 200, unit_landed_cost: scenarioLandedRate };
+
+    const oldAvailable = Number(oldBatchRow.available_qty);
+    const freshAvailable = isPostHike ? Number(freshBatchRow.available_qty) : 0;
+    const totalAvailable = oldAvailable + freshAvailable;
+
+    if (reqResin > totalAvailable) {
+      return res.status(400).json({
+        success: false,
+        message: `${u} units require ${reqResin.toFixed(2)} kg resin, exceeding available stock (${totalAvailable} kg) on ${costingDate}.`
+      });
+    }
+
+    // FIFO Allocation Math on Backend
+    const oldDrawn = Math.min(reqResin, oldAvailable);
+    const freshDrawn = Math.max(0, reqResin - oldDrawn);
+    const oldCostTotal = oldDrawn * Number(oldBatchRow.unit_landed_cost);
+    const freshCostTotal = freshDrawn * scenarioLandedRate;
+    const totalMaterialCost = oldCostTotal + freshCostTotal;
+
+    const blendedRatePerKg = reqResin > 0 ? totalMaterialCost / reqResin : 0;
+    const blendedResinPerUnit = totalMaterialCost / u;
+    const totalCostPerUnit = blendedResinPerUnit + convPerUnit;
+    const profitPerUnit = p.sp - totalCostPerUnit;
+    const marginPct = (profitPerUnit / p.sp) * 100;
+
+    // What-if replacement cost (if made 100% at new price)
+    const replacementResinCost = reqResin * scenarioLandedRate;
+    const savings = replacementResinCost - totalMaterialCost;
+    const replacementUnitCost = (replacementResinCost / u) + convPerUnit;
+    const replacementProfit = p.sp - replacementUnitCost;
+    const replacementMarginPct = (replacementProfit / p.sp) * 100;
+
+    res.json({
+      success: true,
+      data: {
+        product: {
+          id: p.id,
+          name: p.name,
+          sellingPrice: p.sp,
+          netResinPerUnit: p.qty,
+          scrapPct: p.scrap,
+          grossResinPerUnit: Number(grossPerUnit.toFixed(6)),
+          conversionPerUnit: convPerUnit
+        },
+        productionRun: {
+          units: u,
+          grossResinRequired: Number(reqResin.toFixed(4)),
+          totalMaterialCost: Number(totalMaterialCost.toFixed(2)),
+          blendedRatePerKg: Number(blendedRatePerKg.toFixed(4)),
+          blendedResinPerUnit: Number(blendedResinPerUnit.toFixed(2)),
+          totalCostPerUnit: Number(totalCostPerUnit.toFixed(2)),
+          profitPerUnit: Number(profitPerUnit.toFixed(2)),
+          marginPct: Number(marginPct.toFixed(2)),
+          isLossMaking: profitPerUnit < 0
+        },
+        fifoBreakdown: {
+          oldBatch: {
+            code: oldBatchRow.batch_code || 'PP-BATCH-001',
+            rate: Number(oldBatchRow.unit_landed_cost),
+            drawn: Number(oldDrawn.toFixed(2)),
+            cost: Number(oldCostTotal.toFixed(2)),
+            exhausted: oldDrawn >= oldAvailable,
+            remaining: Number((oldAvailable - oldDrawn).toFixed(2))
+          },
+          newBatch: {
+            code: freshBatchRow.batch_code || 'PP-BATCH-002',
+            rate: Number(scenarioLandedRate.toFixed(4)),
+            drawn: Number(freshDrawn.toFixed(2)),
+            cost: Number(freshCostTotal.toFixed(2)),
+            remaining: Number((freshAvailable - freshDrawn).toFixed(2))
+          }
+        },
+        comparisonVsReplacement: {
+          savingsPreserved: Number(savings.toFixed(2)),
+          replacementUnitCost: Number(replacementUnitCost.toFixed(2)),
+          replacementProfit: Number(replacementProfit.toFixed(2)),
+          replacementMarginPct: Number(replacementMarginPct.toFixed(2))
+        }
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 7. Interactive FIFO Issue Allocation API
 app.post('/api/inventory/fifo-issue', async (req, res) => {
   try {
     const { quantity = 120, rate = 247.544, recordTransaction = false } = req.body;

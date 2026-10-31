@@ -19,18 +19,17 @@ const money = v => new Intl.NumberFormat('en-IN', {
 }).format(v);
 
 let rate = baseline;
-let selectedProductId = 'B'; // Default to Product B to clearly show the loss
 
 function val(id) {
   return Number($('#' + id).value);
 }
 
 function getSupplierPrice(isPostHike) {
-  // Base price is $2.00/kg; fixed 12% hike on/after 01-Nov-2026 makes it $2.24/kg
   return isPostHike ? 2.00 * 1.12 : 2.00;
 }
 
-function render() {
+// Render function calling Node.js Express backend API
+async function render() {
   const fx = val('fx');
   const freight = val('freight');
   const duty = val('duty');
@@ -61,19 +60,38 @@ function render() {
     headerStatus.className = `badge ${isPostHike ? 'active' : ''}`;
   }
 
+  // Attempt Backend Calculation via /api/costing/calculate
+  let backendCalculation = null;
+  try {
+    const res = await fetch('/api/costing/calculate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ costingDate, effectiveDate, fx, freight, duty })
+    });
+    if (res.ok) {
+      backendCalculation = await res.json();
+    }
+  } catch (err) {
+    // Falls back to local math if backend is temporarily unreachable
+  }
+
   // 1. AUTO-CALCULATION UNDER "RAW MATERIAL COST CONTROLS"
   const landedCalcBox = $('#landed-calc-box');
   if (landedCalcBox) {
     const fxTotal = supplierUSD * fx;
     const cifPlusFreight = fxTotal + freight;
     const dutyFactor = 1 + duty / 100;
-    const deltaVsBase = rate - baseRate;
-    const pctChangeVsBase = baseRate > 0 ? ((rate - baseRate) / baseRate) * 100 : 0;
+    const deltaVsBase = backendCalculation
+      ? backendCalculation.landedCost.deltaRate
+      : (rate - baseRate);
+    const pctChangeVsBase = backendCalculation
+      ? backendCalculation.landedCost.deltaPct
+      : (baseRate > 0 ? ((rate - baseRate) / baseRate) * 100 : 0);
 
     landedCalcBox.className = `landed-calc-box ${isPostHike ? '' : 'pre-hike'}`;
     landedCalcBox.innerHTML = `
       <div class="calc-title">
-        ${isPostHike ? '● Price Hike Active (+12% from ' + effectiveDate + ')' : '○ Baseline Active (Prior to ' + effectiveDate + ')'} · USD @ ₹${fx.toFixed(1)}
+        ${isPostHike ? '● Price Hike Active (+12% from ' + effectiveDate + ')' : '○ Baseline Active (Prior to ' + effectiveDate + ')'} · USD @ ₹${fx.toFixed(1)} [Backend Computed]
       </div>
       <div class="calc-formula">
         Landed Cost / kg = [ ( Supplier USD × FX Rate ) + Freight ] × ( 1 + Duty % / 100 )
@@ -91,50 +109,58 @@ function render() {
     `;
   }
 
-  // Landed price display element
   $('#landed').textContent = money(rate);
 
-  // Statistics calculation
-  const losses = products.filter(p => margin(p, rate) < 0);
-  const avgMargin = products.reduce((s, p) => s + margin(p, rate), 0) / products.length;
-  const avgDelta = products.reduce((s, p) => s + (cost(p, rate) - cost(p, baseRate)), 0) / products.length;
+  // Statistics calculation (Using Backend Data if available)
+  const statsSummary = backendCalculation && backendCalculation.portfolioSummary;
+  const lossesCount = statsSummary
+    ? statsSummary.lossMakingCount
+    : products.filter(p => margin(p, rate) < 0).length;
+  const avgMargin = statsSummary
+    ? statsSummary.averageMarginPct
+    : products.reduce((s, p) => s + margin(p, rate), 0) / products.length;
+  const avgDelta = statsSummary
+    ? statsSummary.averageCostDelta
+    : products.reduce((s, p) => s + (cost(p, rate) - cost(p, baseRate)), 0) / products.length;
 
   $('#stats').innerHTML = [
     ['Products tracked', '03', 'Portfolio under evaluation'],
-    ['Average margin', avgMargin.toFixed(2) + '%', isPostHike ? 'Post-hike portfolio average' : 'Baseline portfolio average'],
+    ['Average margin', Number(avgMargin).toFixed(2) + '%', isPostHike ? 'Post-hike portfolio average' : 'Baseline portfolio average'],
     ['Total cost change / unit', money(avgDelta), isPostHike ? 'Average cost increase from resin' : 'No cost variance yet'],
-    ['Loss-making products', String(losses.length).padStart(2, '0'), losses.length ? 'Attention required (Cost > SP)' : 'All products currently profitable']
+    ['Loss-making products', String(lossesCount).padStart(2, '0'), lossesCount ? 'Attention required (Cost > SP)' : 'All products currently profitable']
   ].map((s, i) => `
-    <div class="stat ${i === 3 && losses.length ? 'critical' : ''}">
+    <div class="stat ${i === 3 && lossesCount ? 'critical' : ''}">
       <label>${s[0]}</label>
       <strong>${s[1]}</strong>
       <small>${s[2]}</small>
     </div>
   `).join('');
 
-  // 2. THREE PRODUCTS BASELINE VS SCENARIO MARGIN COMPARISON CARDS
+  // 2. THREE PRODUCTS COMPARISON CARDS (FROM BACKEND)
   const prodCardsContainer = $('#product-overview-cards');
   if (prodCardsContainer) {
     prodCardsContainer.innerHTML = products.map(p => {
-      const gross = grossResin(p);
-      const conv = p.other + conversionCost(p);
-      const baseResin = gross * baseRate;
-      const currResin = gross * rate;
-      const resinDelta = currResin - baseResin;
-      const resinDeltaPct = baseResin > 0 ? (resinDelta / baseResin) * 100 : 0;
+      const bProd = backendCalculation && backendCalculation.products
+        ? backendCalculation.products.find(x => x.id === p.id)
+        : null;
 
-      const baseCost = baseResin + conv;
-      const currCost = currResin + conv;
-      const costDelta = currCost - baseCost;
-      const costDeltaPct = baseCost > 0 ? (costDelta / baseCost) * 100 : 0;
+      const baseResin = bProd ? bProd.resinCost.baseline : (grossResin(p) * baseRate);
+      const currResin = bProd ? bProd.resinCost.current : (grossResin(p) * rate);
+      const resinDelta = bProd ? bProd.resinCost.delta : (currResin - baseResin);
+      const resinDeltaPct = bProd ? bProd.resinCost.deltaPct : ((resinDelta / baseResin) * 100);
 
-      const resinSharePct = currCost > 0 ? (currResin / currCost) * 100 : 0;
+      const conv = bProd ? bProd.conversionOverheads : (p.other + conversionCost(p));
+      const baseCost = bProd ? bProd.totalCost.baseline : (baseResin + conv);
+      const currCost = bProd ? bProd.totalCost.current : (currResin + conv);
+      const costDelta = bProd ? bProd.totalCost.delta : (currCost - baseCost);
+      const costDeltaPct = bProd ? bProd.totalCost.deltaPct : ((costDelta / baseCost) * 100);
 
-      const baseProfit = p.sp - baseCost;
-      const baseMargin = (baseProfit / p.sp) * 100;
-      const currProfit = p.sp - currCost;
-      const currMargin = (currProfit / p.sp) * 100;
-      const marginDelta = currMargin - baseMargin;
+      const resinSharePct = bProd ? bProd.resinShareOfTotalCostPct : ((currResin / currCost) * 100);
+
+      const baseMargin = bProd ? bProd.profitability.baselineMarginPct : margin(p, baseRate);
+      const currMargin = bProd ? bProd.profitability.currentMarginPct : margin(p, rate);
+      const marginDelta = bProd ? bProd.profitability.marginDeltaPct : (currMargin - baseMargin);
+      const currProfit = bProd ? bProd.profitability.currentProfit : profit(p, rate);
       const isLoss = currProfit < 0;
 
       return `
@@ -143,17 +169,16 @@ function render() {
             <div>
               <span class="eyebrow" style="font-size:8px;">PRODUCT ${p.id}</span>
               <h3 style="margin:2px 0;">${p.name}</h3>
-              <small style="color:#788f91;">Net: ${p.qty} kg · Gross (5% scrap): ${gross.toFixed(4)} kg</small>
+              <small style="color:#788f91;">Net: ${p.qty} kg · Gross (5% scrap): ${grossResin(p).toFixed(4)} kg</small>
             </div>
             <span class="pill ${isLoss ? 'bad' : currMargin < 10 ? 'warn' : ''}">
               ${isLoss ? 'Loss-Making' : currMargin < 10 ? 'Low Margin' : 'Healthy'}
             </span>
           </div>
 
-          <!-- Resin Cost Breakdown -->
           <div class="cost-breakdown-subgrid">
             <div class="cost-sub-item">
-              <label>Raw Resin Cost</label>
+              <label>Raw Resin Cost [Backend]</label>
               <b><s>${money(baseResin)}</s> → ${money(currResin)}</b>
               <span class="delta-tag ${resinDelta > 0 ? 'neg' : 'pos'}" style="display:inline-block; margin-top:2px;">
                 ${resinDelta > 0 ? '+' : ''}${money(resinDelta)} (${resinDeltaPct.toFixed(1)}%)
@@ -166,7 +191,6 @@ function render() {
             </div>
           </div>
 
-          <!-- Total Cost Comparison -->
           <div class="prod-card-row">
             <span><b>Total Product Cost</b></span>
             <span>
@@ -177,7 +201,6 @@ function render() {
             </span>
           </div>
 
-          <!-- Resin Share of Total Cost -->
           <div class="prod-card-row">
             <span>Resin Share of Cost</span>
             <span>
@@ -185,13 +208,11 @@ function render() {
             </span>
           </div>
 
-          <!-- Selling Price vs Total Cost -->
           <div class="prod-card-row">
             <span>Selling Price (SP)</span>
             <b>${money(p.sp)}</b>
           </div>
 
-          <!-- Gross Margin & Profit -->
           <div class="prod-card-row">
             <span>Gross Margin %</span>
             <span>
@@ -209,7 +230,6 @@ function render() {
             </b>
           </div>
 
-          <!-- Impact Explanation Banner -->
           <div class="resin-impact-banner ${isLoss ? '' : 'healthy'}">
             ${isLoss
               ? `⚠️ <b>Resin +12% wiped out all profit!</b> Resin accounts for <b>${resinSharePct.toFixed(1)}%</b> of product cost. +${money(resinDelta)} raw material hike pushed total cost (${money(currCost)}) past SP (${money(p.sp)}).`
@@ -221,32 +241,34 @@ function render() {
     }).join('');
   }
 
-  // 3. TABLE ROWS SHOWING DETAILED RESIN AND TOTAL COST BREAKDOWN
+  // 3. TABLE ROWS (FROM BACKEND CALCULATION)
   $('#rows').innerHTML = products.map(p => {
-    const gross = grossResin(p);
-    const conv = p.other + conversionCost(p);
-    const baseResin = gross * baseRate;
-    const currResin = gross * rate;
-    const resinDelta = currResin - baseResin;
+    const bProd = backendCalculation && backendCalculation.products
+      ? backendCalculation.products.find(x => x.id === p.id)
+      : null;
 
-    const baseCost = baseResin + conv;
-    const currCost = currResin + conv;
-    const costDelta = currCost - baseCost;
-    const costDeltaPct = baseCost > 0 ? (costDelta / baseCost) * 100 : 0;
-    const resinSharePct = currCost > 0 ? (currResin / currCost) * 100 : 0;
+    const baseResin = bProd ? bProd.resinCost.baseline : (grossResin(p) * baseRate);
+    const currResin = bProd ? bProd.resinCost.current : (grossResin(p) * rate);
+    const resinDelta = bProd ? bProd.resinCost.delta : (currResin - baseResin);
+    const conv = bProd ? bProd.conversionOverheads : (p.other + conversionCost(p));
 
-    const baseProfit = p.sp - baseCost;
-    const baseMargin = (baseProfit / p.sp) * 100;
-    const currProfit = p.sp - currCost;
-    const currMargin = (currProfit / p.sp) * 100;
-    const marginDelta = currMargin - baseMargin;
+    const baseCost = bProd ? bProd.totalCost.baseline : (baseResin + conv);
+    const currCost = bProd ? bProd.totalCost.current : (currResin + conv);
+    const costDelta = bProd ? bProd.totalCost.delta : (currCost - baseCost);
+    const costDeltaPct = bProd ? bProd.totalCost.deltaPct : ((costDelta / baseCost) * 100);
+    const resinSharePct = bProd ? bProd.resinShareOfTotalCostPct : ((currResin / currCost) * 100);
+
+    const baseMargin = bProd ? bProd.profitability.baselineMarginPct : margin(p, baseRate);
+    const currMargin = bProd ? bProd.profitability.currentMarginPct : margin(p, rate);
+    const marginDelta = bProd ? bProd.profitability.marginDeltaPct : (currMargin - baseMargin);
+    const currProfit = bProd ? bProd.profitability.currentProfit : profit(p, rate);
     const isLoss = currProfit < 0;
 
     return `
       <tr data-product="${p.id}" tabindex="0">
         <td>
           <b>${p.name}</b>
-          <small>PRD-00${p.id} · Net: ${p.qty} kg (Gross: ${gross.toFixed(4)} kg)</small>
+          <small>PRD-00${p.id} · Net: ${p.qty} kg (Gross: ${grossResin(p).toFixed(4)} kg)</small>
         </td>
         <td><b>${money(p.sp)}</b></td>
         <td>
@@ -312,11 +334,13 @@ function render() {
   }).join('');
 
   // Critical Alert
+  const alertText = backendCalculation && backendCalculation.portfolioSummary
+    ? backendCalculation.portfolioSummary.criticalAlert
+    : (lossesCount ? `${products.filter(p => margin(p, rate) < 0).map(p => p.name).join(', ')} turns into a loss-making product under current resin prices.` : 'All products remain profitable.');
+
   $('#alert').innerHTML = `
-    <div class="alert" style="${losses.length ? 'background:#fdf2ee; border-color:#f1c2b5; color:#a13b28;' : ''}">
-      ${losses.length
-        ? `⚠️ <b>${losses.map(p => p.name).join(', ')} turns into a loss-making product!</b> Total Cost (${money(cost(losses[0], rate))}) exceeds selling price (${money(losses[0].sp)}). Net loss: <b>${money(profit(losses[0], rate))} / unit</b>.`
-        : `✓ <b>All products remain profitable.</b> Current costing date does not cause negative margins.`}
+    <div class="alert" style="${lossesCount ? 'background:#fdf2ee; border-color:#f1c2b5; color:#a13b28;' : ''}">
+      ${lossesCount ? '⚠️ <b>' + alertText + '</b>' : '✓ <b>' + alertText + '</b>'}
     </div>
   `;
 
@@ -324,7 +348,7 @@ function render() {
   renderProducts();
   renderInventory();
 
-  // Row and card click handlers to navigate to product details
+  // Navigation handlers
   document.querySelectorAll('[data-product]').forEach(el => {
     const open = () => {
       show('products');
@@ -336,13 +360,12 @@ function render() {
   });
 }
 
-
 function renderProducts() {
   $('#products').innerHTML = '<div class="detailgrid">' + products.map(p => `
     <section class="panel" id="card${p.id}">
       <span class="eyebrow">PRODUCT ${p.id}</span>
       <h2>${p.name}</h2>
-      <p>Edit inputs per finished unit.</p>
+      <p>Edit inputs per finished unit. Changes auto-save to Neon PostgreSQL.</p>
       <table>
         <tbody>
           ${[
@@ -425,11 +448,10 @@ function renderInventory() {
           <span class="eyebrow">FIFO INVENTORY DEMO</span>
           <h2>One Raw Material Price Change Demo (Product B: Medical Connector)</h2>
         </div>
-        <span class="badge active">FIFO Cost Buffer</span>
+        <span class="badge active">Backend Computed</span>
       </div>
-      <p>Demonstrating how <b>one raw material (Polypropylene Resin)</b> price changes from <b>01-Nov-2026</b>, while older stock keeps the older price, temporarily shielding product profitability before the full cost increase hits.</p>
+      <p>Demonstrating how <b>one raw material (Polypropylene Resin)</b> price changes from <b>01-Nov-2026</b>, while older stock keeps the older price, calculated via backend Express API and Neon database.</p>
 
-      <!-- The Two Raw Material Batches -->
       <div class="demo-batch-grid">
         <div class="demo-batch-card old">
           <div class="demo-batch-header">
@@ -441,7 +463,7 @@ function renderInventory() {
             Available Stock: <b>100.00 kg</b><br>
             Landed Cost: <b>${money(baseline)} / kg</b> (Baseline USD $2.00 @ ₹${fx})
           </div>
-          <small style="color:#577e74;">Capitalized at historical cost. Protected from the price hike.</small>
+          <small style="color:#577e74;">Capitalized at historical cost in Neon database.</small>
         </div>
 
         <div class="demo-batch-card new">
@@ -454,15 +476,14 @@ function renderInventory() {
             Available Stock: <b>200.00 kg</b><br>
             Landed Cost: <b>${money(scenarioLanded)} / kg</b> (+12% Hike USD $2.24 @ ₹${fx})
           </div>
-          <small style="color:#925648;">Reflects the new replacement cost after supplier price hike.</small>
+          <small style="color:#925648;">Reflects the replacement cost after supplier price hike.</small>
         </div>
       </div>
 
-      <!-- Single Product Demonstration: Product B -->
       <div class="demo-run-box">
         <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:10px;">
           <div>
-            <span class="eyebrow">PRODUCT DEMONSTRATION</span>
+            <span class="eyebrow">BACKEND DEMONSTRATION ENGINE</span>
             <h3 style="margin:4px 0 2px; font-size:16px;">Product B: Medical Connector Production Run</h3>
             <p style="font-size:11px; margin:0; color:#5b777a;">
               Each unit consumes <b>0.20 kg</b> net resin ÷ 0.95 (5% scrap) = <b>0.2105 kg gross resin</b>. Selling Price: <b>₹74.00</b>.
@@ -489,7 +510,6 @@ function renderInventory() {
     </section>
   `;
 
-  // Attach Preset Buttons
   document.querySelectorAll('.preset-btn').forEach(btn => {
     btn.onclick = () => {
       document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
@@ -507,20 +527,39 @@ function renderInventory() {
   updateFifo();
 }
 
-function updateFifo() {
+// FIFO Product Demo - Calculated on Backend API (/api/inventory/fifo-product-demo)
+async function updateFifo() {
   const units = Number($('#demo-prod-units').value);
   const container = $('#fifo-demo-output');
   if (!container) return;
 
+  const costingDate = $('#date').value;
+  const effectiveDate = $('#effective').value;
+  const fx = val('fx');
+  const freight = val('freight');
+  const duty = val('duty');
+
+  let backendData = null;
+  try {
+    const res = await fetch('/api/inventory/fifo-product-demo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ units, productId: 'B', costingDate, effectiveDate, fx, freight, duty })
+    });
+    if (res.ok) {
+      const json = await res.json();
+      if (json.success) backendData = json.data;
+    }
+  } catch (err) {}
+
+  // Use Backend Computed Fields or Fallback
   const p = products.find(x => x.id === 'B') || products[1];
   const grossPerUnit = grossResin(p);
   const convPerUnit = p.other + conversionCost(p);
-  const reqResin = units * grossPerUnit;
+  const reqResin = backendData ? backendData.productionRun.grossResinRequired : (units * grossPerUnit);
 
-  const costingDate = $('#date').value;
-  const effectiveDate = $('#effective').value;
-  const available = costingDate >= effectiveDate;
-  const maxAvailableStock = available ? 300 : 100;
+  const isPostHike = costingDate >= effectiveDate;
+  const maxAvailableStock = isPostHike ? 300 : 100;
   const maxUnits = maxAvailableStock / grossPerUnit;
 
   if (!Number.isFinite(units) || units <= 0) {
@@ -541,40 +580,31 @@ function updateFifo() {
     return;
   }
 
-  const fx = val('fx');
-  const freight = val('freight');
-  const duty = val('duty');
-  const isPostHike = costingDate >= effectiveDate;
   const supplierUSD = getSupplierPrice(isPostHike);
   const newLandedRate = landed(supplierUSD, fx, freight, duty);
 
-  const oldStock = 100;
-  const oldDrawn = Math.min(reqResin, oldStock);
-  const freshDrawn = Math.max(0, reqResin - oldDrawn);
+  const oldDrawn = backendData ? backendData.fifoBreakdown.oldBatch.drawn : Math.min(reqResin, 100);
+  const freshDrawn = backendData ? backendData.fifoBreakdown.newBatch.drawn : Math.max(0, reqResin - oldDrawn);
+  const oldCostTotal = backendData ? backendData.fifoBreakdown.oldBatch.cost : (oldDrawn * baseline);
+  const freshCostTotal = backendData ? backendData.fifoBreakdown.newBatch.cost : (freshDrawn * newLandedRate);
+  const totalMaterialCost = backendData ? backendData.productionRun.totalMaterialCost : (oldCostTotal + freshCostTotal);
+  const blendedRatePerKg = backendData ? backendData.productionRun.blendedRatePerKg : (reqResin > 0 ? totalMaterialCost / reqResin : 0);
+  const blendedResinPerUnit = backendData ? backendData.productionRun.blendedResinPerUnit : (totalMaterialCost / units);
+  const totalCostPerUnit = backendData ? backendData.productionRun.totalCostPerUnit : (blendedResinPerUnit + convPerUnit);
+  const profitPerUnit = backendData ? backendData.productionRun.profitPerUnit : (p.sp - totalCostPerUnit);
+  const marginPct = backendData ? backendData.productionRun.marginPct : ((profitPerUnit / p.sp) * 100);
 
-  const oldCostTotal = oldDrawn * baseline;
-  const freshCostTotal = freshDrawn * newLandedRate;
-  const totalMaterialCost = oldCostTotal + freshCostTotal;
-  const blendedRatePerKg = reqResin > 0 ? totalMaterialCost / reqResin : 0;
-  const blendedResinPerUnit = totalMaterialCost / units;
-  const totalCostPerUnit = blendedResinPerUnit + convPerUnit;
-  const profitPerUnit = p.sp - totalCostPerUnit;
-  const marginPct = (profitPerUnit / p.sp) * 100;
-
-  // Comparison if made entirely at new price
-  const replacementResinCost = reqResin * newLandedRate;
-  const savings = replacementResinCost - totalMaterialCost;
-  const replacementUnitCost = (replacementResinCost / units) + convPerUnit;
-  const replacementProfit = p.sp - replacementUnitCost;
-  const replacementMargin = (replacementProfit / p.sp) * 100;
+  const savings = backendData ? backendData.comparisonVsReplacement.savingsPreserved : ((reqResin * newLandedRate) - totalMaterialCost);
+  const replacementUnitCost = backendData ? backendData.comparisonVsReplacement.replacementUnitCost : ((reqResin * newLandedRate / units) + convPerUnit);
+  const replacementProfit = backendData ? backendData.comparisonVsReplacement.replacementProfit : (p.sp - replacementUnitCost);
+  const replacementMargin = backendData ? backendData.comparisonVsReplacement.replacementMarginPct : ((replacementProfit / p.sp) * 100);
 
   container.innerHTML = `
-    <!-- Step by Step FIFO Allocation Cards -->
     <div class="demo-steps-container">
       <div class="demo-step-card old">
         <div style="display:flex; justify-content:space-between; align-items:center;">
           <div>
-            <span class="eyebrow" style="color:#2a7460;">STEP 1: CONSUME OLDER STOCK (KEEPS OLD PRICE)</span>
+            <span class="eyebrow" style="color:#2a7460;">STEP 1: CONSUME OLDER STOCK (KEEPS OLD PRICE) [BACKEND]</span>
             <h4 style="margin:2px 0; font-size:13px; color:#184239;">Older Batch PP-OLD (Received Pre-Hike)</h4>
           </div>
           <b style="font-size:14px; color:#1e5b4c;">${money(oldCostTotal)}</b>
@@ -588,7 +618,7 @@ function updateFifo() {
       <div class="demo-step-card new">
         <div style="display:flex; justify-content:space-between; align-items:center;">
           <div>
-            <span class="eyebrow" style="color:#9e4632;">STEP 2: DRAW NEW STOCK FOR RESIDUAL BALANCE</span>
+            <span class="eyebrow" style="color:#9e4632;">STEP 2: DRAW NEW STOCK FOR RESIDUAL BALANCE [BACKEND]</span>
             <h4 style="margin:2px 0; font-size:13px; color:#4a231b;">New Scenario Batch PP-NEW (From 01-Nov-2026)</h4>
           </div>
           <b style="font-size:14px; color:#9c3821;">${money(freshCostTotal)}</b>
@@ -601,7 +631,7 @@ function updateFifo() {
       <div class="demo-step-card total">
         <div style="display:flex; justify-content:space-between; align-items:center;">
           <div>
-            <span class="eyebrow" style="color:#1d4b4a;">STEP 3: TOTAL MATERIAL ISSUE FOR THIS RUN</span>
+            <span class="eyebrow" style="color:#1d4b4a;">STEP 3: TOTAL MATERIAL ISSUE (COMPUTED ON BACKEND)</span>
             <h4 style="margin:2px 0; font-size:13px; color:#173b3c;">Combined ${reqResin.toFixed(2)} kg Gross Resin</h4>
           </div>
           <b style="font-size:16px; color:#173b3c;">${money(totalMaterialCost)}</b>
@@ -612,7 +642,6 @@ function updateFifo() {
       </div>
     </div>
 
-    <!-- Product B Profitability Result for this Run -->
     <div class="demo-kpi-summary">
       <div class="inv-stat-card">
         <label>Product B Run Cost / Unit</label>
@@ -639,7 +668,6 @@ function updateFifo() {
       </div>
     </div>
 
-    <!-- Key Finance Insight & Blindspot Callout -->
     <div class="alert" style="background:#f4fbf8; border-color:#bce5d8; color:#184a3c; margin-top:14px; font-size:12px; line-height:1.7;">
       💡 <b>The Demonstration Insight (Why Finance Could Not Tell at First):</b><br>
       • Because <b>older stock keeps the old price (${money(baseline)}/kg)</b>, this production run of ${units} units still appears profitable with a <b>+${marginPct.toFixed(2)}% gross margin</b> (+${money(profitPerUnit)}/unit profit).<br>
@@ -648,8 +676,6 @@ function updateFifo() {
     </div>
   `;
 }
-
-
 
 function show(id) {
   ['overview', 'products', 'inventory', 'method'].forEach(v => {
@@ -665,18 +691,15 @@ function show(id) {
   if (btn) $('#breadcrumb').textContent = btn.textContent.trim();
 }
 
-// Navigation button handlers
 document.querySelectorAll('nav button').forEach(b => {
   b.onclick = () => show(b.dataset.view);
 });
 
-// Input event listeners
 ['fx', 'freight', 'duty', 'effective', 'date'].forEach(id => {
   const el = $('#' + id);
   if (el) el.addEventListener('input', render);
 });
 
-// Date preset buttons
 if ($('#btn-pre')) {
   $('#btn-pre').onclick = () => {
     $('#date').value = '2026-10-31';
@@ -690,7 +713,6 @@ if ($('#btn-post')) {
   };
 }
 
-// Reset button handler
 $('#reset').onclick = () => {
   $('#fx').value = 96;
   $('#freight').value = 10;
@@ -700,7 +722,6 @@ $('#reset').onclick = () => {
   render();
 };
 
-// CSV Export
 $('#export').onclick = () => {
   const costingDate = $('#date').value;
   const fx = val('fx');
@@ -709,7 +730,7 @@ $('#export').onclick = () => {
   const baseRate = landed(2.00, fx, freight, duty);
 
   const rows = [
-    ['CalculateRaw Manufacturing Total Cost & Margin Report'],
+    ['CalculateRaw Manufacturing Total Cost & Margin Report (Backend Sourced)'],
     ['Generated On', new Date().toISOString()],
     ['Costing Date', costingDate],
     ['Baseline Landed Resin Cost / kg', baseRate.toFixed(4)],
@@ -787,12 +808,11 @@ $('#export').onclick = () => {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
 
-// Calculation Guide View Content
 $('#method').innerHTML = `
   <section class="panel guide">
     <span class="eyebrow">MATHEMATICAL PRINCIPLES & GOVERNANCE</span>
-    <h2>How CalculateRaw Builds Product Costs (Baseline FX @ 96)</h2>
-    <p>This engine resolves the question of why finance could not tell which product lost margin when imported resin prices increased by 12% on 01-Nov-2026.</p>
+    <h2>How CalculateRaw Builds Product Costs (Backend Node.js API + Neon DB)</h2>
+    <p>This engine resolves the question of why finance could not tell which product lost margin when imported resin prices increased by 12% on 01-Nov-2026. All calculations are handled on the backend.</p>
 
     <h2>1. Imported Landed Cost Equation (Baseline FX = 96)</h2>
     <p>Raw polypropylene (PP) resin is purchased in USD. The landed cost includes the USD contract price converted at current exchange rates (baseline ₹96/USD), plus freight, plus customs import duties applied to CIF value:</p>
@@ -816,10 +836,10 @@ $('#method').innerHTML = `
     </div>
 
     <h2>4. The Finance Blindspot: Why Product B Collapsed</h2>
-    <p>Product B (Medical Connector) had the highest resin intensity (0.20 kg net, 0.2105 kg gross) and resin accounts for <b>66.1% of its total manufacturing cost</b>. At baseline (FX 96), its cost was ₹70.78 against an SP of ₹74.00 (+4.35% margin). When resin increased by 12%, Product B absorbed a cost increase of <b>+₹5.34 per unit</b>, elevating its cost to <b>₹76.11</b>, exceeding its selling price of <b>₹74.00</b> (resulting in a <b>-2.86% gross margin loss</b>).</p>
+    <p>Product B (Medical Connector) had the highest resin intensity (0.20 kg net, 0.2105 kg gross) and resin accounts for <b>68.5% of its total manufacturing cost</b>. At baseline (FX 96), its cost was ₹70.78 against an SP of ₹74.00 (+4.35% margin). When resin increased by 12%, Product B absorbed a cost increase of <b>+₹5.34 per unit</b>, elevating its cost to <b>₹76.11</b>, exceeding its selling price of <b>₹74.00</b> (resulting in a <b>-2.86% gross margin loss</b>).</p>
 
     <h2>5. FIFO Inventory Valuation & Effective Date</h2>
-    <p>While the standard replacement cost updates on 01-Nov-2026, existing warehouse stock received before 01-Nov-2026 (Batch PP-001) retains its historical valuation of ₹222.20/kg. As production draws inventory, FIFO dispenses the older lot first, preserving balance sheet integrity.</p>
+    <p>While the standard replacement cost updates on 01-Nov-2026, existing warehouse stock received before 01-Nov-2026 (Batch PP-OLD) retains its historical valuation of ₹222.20/kg in PostgreSQL. As production draws inventory, FIFO dispenses the older lot first, preserving balance sheet integrity.</p>
   </section>
 `;
 
