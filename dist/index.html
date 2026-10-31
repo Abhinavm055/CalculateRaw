@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CalculateRaw | Manufacturing Cost & Margin Intelligence</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <aside>
+    <a class="brand" href="#">◈ <span>Calculate</span>Raw</a>
+    <small>FINANCE INTELLIGENCE</small>
+    <nav>
+      <button class="active" data-view="overview">▦ &nbsp; Cost overview</button>
+      <button data-view="products">◫ &nbsp; Product & BOM</button>
+      <button data-view="inventory">▤ &nbsp; Inventory & FIFO</button>
+      <button data-view="method">◎ &nbsp; Calculation guide</button>
+    </nav>
+    <div class="sidebottom">
+      <span class="dot"></span> Active Engine
+      <p>Real-time costing with fixed 12% price hike from 01-Nov-2026.</p>
+      <div class="avatar">C</div> Manufacturing Team
+    </div>
+  </aside>
+
+  <main>
+    <header>
+      <span>Workspace <i>/</i> <b id="breadcrumb">Cost overview</b></span>
+      <span class="badge active" id="header-status">Fixed +12% from 01-11-2026</span>
+    </header>
+
+    <section class="intro">
+      <div>
+        <div class="eyebrow">MANUFACTURING COST ENGINE</div>
+        <h1>Every cost. Every margin in real time.</h1>
+        <p>Auto-calculating raw material landed cost, BOM scrap, and baseline vs scenario margin shifts across your portfolio.</p>
+      </div>
+      <button class="export" id="export">↧ &nbsp; Export report</button>
+    </section>
+
+    <!-- Overview View -->
+    <div id="overview">
+      <div class="topline">
+        <div>
+          <span class="dot"></span> Live Costing Analysis
+        </div>
+        <div class="topline-right">
+          <div class="date-presets">
+            <button type="button" class="date-btn" id="btn-pre">◄ Before 1-Nov-2026 (Baseline)</button>
+            <button type="button" class="date-btn active" id="btn-post">From 1-Nov-2026 (+12% Hike) ►</button>
+          </div>
+          <label>Costing date: <input type="date" id="date" value="2026-11-01"></label>
+        </div>
+      </div>
+
+      <section class="stats" id="stats"></section>
+
+      <div class="workspace">
+        <!-- Raw Material Cost Controls Panel -->
+        <section class="panel simulator">
+          <div class="panelhead">
+            <div>
+              <span class="eyebrow">RAW MATERIAL COST CONTROLS</span>
+              <h2>Imported Resin Landed Cost</h2>
+            </div>
+            <span class="icon">₹</span>
+          </div>
+          <p>Polypropylene (PP) resin price increases by <b>12%</b> on <b>01-Nov-2026</b>.</p>
+
+          <!-- Auto-Calculated Landed Cost Breakdown Box -->
+          <div id="landed-calc-box" class="landed-calc-box">
+            <!-- Evaluated live via JavaScript -->
+          </div>
+
+          <div class="inputs">
+            <label>Cost of USD (Exchange rate · ₹ / USD)
+              <input id="fx" type="number" min="1" step="0.1" value="96">
+            </label>
+            <label>Freight charge · ₹ / kg
+              <input id="freight" type="number" min="0" step="0.1" value="10">
+            </label>
+            <label>Import duty · %
+              <input id="duty" type="number" min="0" max="100" value="10">
+            </label>
+            <label>Price hike effective from
+              <input id="effective" type="date" value="2026-11-01">
+            </label>
+          </div>
+
+          <div class="landed">
+            <span>Current Landed Resin Cost / kg</span>
+            <div>
+              <s>₹222.20</s> <strong id="landed">₹247.54</strong>
+            </div>
+          </div>
+
+          <div class="note">
+            ⓘ Baseline USD FX is fixed at <b>₹96/USD</b> (Baseline landed cost: <b>₹222.20/kg</b>). When resin increases by 12% on <b>01-Nov-2026</b>, landed cost rises to <b>₹247.54/kg</b>.
+          </div>
+          <button class="reset" id="reset">↺ Reset to baseline quantum (USD 96)</button>
+        </section>
+
+        <!-- Product Performance & Margins Panel -->
+        <section class="panel margins">
+          <div class="panelhead">
+            <div>
+              <span class="eyebrow">PORTFOLIO IMPACT</span>
+              <h2>Gross Margin Comparison</h2>
+            </div>
+            <div class="legend">
+              <span>● Baseline</span>
+              <span>● Current Scenario</span>
+            </div>
+          </div>
+          <p>Gross margin % by product · Selling price vs Total cost</p>
+          <div id="chart"></div>
+          <div id="alert"></div>
+          <div class="chartfoot">Baseline Quantum: USD 2.00/kg · ₹96/USD · ₹10 freight · 10% duty = ₹222.20/kg landed</div>
+        </section>
+      </div>
+
+      <!-- 3 Products Baseline vs Current Margin Summary Cards -->
+      <section class="panel" style="margin-bottom:24px;">
+        <div class="panelhead">
+          <div>
+            <span class="eyebrow">THREE-PRODUCT COMPARISON</span>
+            <h2>Baseline vs Scenario Cost & Raw Material Impact Matrix</h2>
+          </div>
+          <span class="badge active">Auto-updating</span>
+        </div>
+        <p>Reveals how much the resin cost increased, how the total product cost increased, resin share of cost, and the margin collapse vs selling price (SP):</p>
+
+        <div id="product-overview-cards" class="product-cards-overview">
+          <!-- Rendered live via JavaScript -->
+        </div>
+      </section>
+
+      <!-- Detailed Product Profitability Table -->
+      <section class="panel tablepanel">
+        <div class="panelhead">
+          <div>
+            <h2>Product Total Cost & Selling Price (SP) Profitability</h2>
+            <p>Full breakdown: Raw resin cost increase, non-resin conversion, total product cost, and margin variance vs SP.</p>
+          </div>
+          <span class="tag">3 PRODUCTS</span>
+        </div>
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th>Selling Price (SP)</th>
+                <th>Raw Resin Cost (Base → New)</th>
+                <th>Resin Cost Δ</th>
+                <th>Conversion Overheads</th>
+                <th>Total Cost (Base → New)</th>
+                <th>Total Cost Δ</th>
+                <th>Resin Share %</th>
+                <th>Unit Profit / Loss</th>
+                <th>Margin % (Base → New)</th>
+                <th>Margin Δ</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+        <div class="chartfoot">Click any product row to inspect and edit its BOM lines and cost components.</div>
+      </section>
+    </div>
+
+    <!-- Products & BOM View -->
+    <div id="products" hidden></div>
+
+    <!-- Inventory Batches (FIFO) View -->
+    <div id="inventory" hidden></div>
+
+    <!-- Calculation Guide View -->
+    <div id="method" hidden></div>
+
+    <footer>
+      CalculateRaw <span>Precision Manufacturing Cost & Margin System · Local Prototype</span>
+    </footer>
+  </main>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
