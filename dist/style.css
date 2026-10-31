@@ -445,6 +445,71 @@ h2 {
   font-weight: 600;
 }
 
+/* Product B FIFO Demo Specific Styles */
+.demo-batch-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin: 16px 0;
+}
+.demo-batch-card {
+  background: #ffffff;
+  border: 1px solid #dce8e5;
+  border-radius: 8px;
+  padding: 16px 18px;
+}
+.demo-batch-card.old {
+  border-left: 4px solid #2e7d69;
+}
+.demo-batch-card.new {
+  border-left: 4px solid #b8573d;
+}
+.demo-batch-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.demo-batch-header b {
+  font-size: 13px;
+  color: #1a3c3b;
+}
+.demo-run-box {
+  background: #f8fbfa;
+  border: 1px solid #dce8e4;
+  border-radius: 8px;
+  padding: 22px;
+  margin-top: 20px;
+}
+.demo-steps-container {
+  display: grid;
+  gap: 12px;
+  margin: 18px 0;
+}
+.demo-step-card {
+  background: #ffffff;
+  border: 1px solid #e1ebe8;
+  border-radius: 6px;
+  padding: 14px 16px;
+}
+.demo-step-card.old {
+  border-left: 3px solid #368a71;
+}
+.demo-step-card.new {
+  border-left: 3px solid #ce684e;
+}
+.demo-step-card.total {
+  border-left: 3px solid #1c4b4a;
+  background: #f2f7f5;
+}
+.demo-kpi-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin: 18px 0;
+}
+
+
 
 .inputs {
   display: grid;

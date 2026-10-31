@@ -422,96 +422,70 @@ function renderInventory() {
     <section class="panel">
       <div class="panelhead">
         <div>
-          <span class="eyebrow">INVENTORY VALUATION & FIFO DISPATCH ENGINE</span>
-          <h2>Existing Batches & Real-Time Stock Issue Analyzer</h2>
+          <span class="eyebrow">FIFO INVENTORY DEMO</span>
+          <h2>One Raw Material Price Change Demo (Product B: Medical Connector)</h2>
         </div>
-        <span class="badge active">FIFO Stock Engine</span>
+        <span class="badge active">FIFO Cost Buffer</span>
       </div>
-      <p>Existing stock batches keep their original landed costs. When you specify a required production quantity, this engine analyzes batch consumption, calculates residual stock, and computes the exact blended cost.</p>
+      <p>Demonstrating how <b>one raw material (Polypropylene Resin)</b> price changes from <b>01-Nov-2026</b>, while older stock keeps the older price, temporarily shielding product profitability before the full cost increase hits.</p>
 
-      <!-- Existing On-Hand Batches Table -->
-      <h3 style="margin:20px 0 10px; font-size:14px; color:#183c3e;">1. Existing Warehouse Batches (On-Hand Inventory)</h3>
-      <div class="tablewrap">
-        <table class="batch-table">
-          <thead>
-            <tr>
-              <th>Batch Identifier</th>
-              <th>Receipt Date</th>
-              <th>Price Tariff</th>
-              <th>Initial Stock</th>
-              <th>Unit Landed Cost</th>
-              <th>Total Valuation</th>
-              <th>Batch Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><b>PP-BATCH-001</b><small>Existing Old Batch · Silo A</small></td>
-              <td>2026-10-20</td>
-              <td>Pre-Hike (Baseline $2.00)</td>
-              <td><b>100.00 kg</b></td>
-              <td>${money(baseline)} / kg</td>
-              <td>${money(100 * baseline)}</td>
-              <td><span class="batch-badge old">Protected Old Cost</span></td>
-            </tr>
-            <tr>
-              <td><b>PP-BATCH-002</b><small>Scenario New Batch · Silo B</small></td>
-              <td>${effectiveDate}</td>
-              <td>Post-Hike (+12% $2.24)</td>
-              <td><b>200.00 kg</b></td>
-              <td>${money(scenarioLanded)} / kg</td>
-              <td>${money(200 * scenarioLanded)}</td>
-              <td><span class="batch-badge new">Post-Hike Tariff</span></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <!-- Interactive Analyzer Input Controls -->
-      <h3 style="margin:25px 0 10px; font-size:14px; color:#183c3e;">2. Interactive Production Issue Requirement</h3>
-      <p>Specify the required amount directly in kg, use quick presets, or calculate demand from finished product volume:</p>
-
-      <div class="inv-grid">
-        <!-- Direct kg Entry -->
-        <div class="inv-calc-box">
-          <label style="font-size:11px; font-weight:600; color:#23494b;">
-            Option A: Specify Exact Resin Quantity (kg)
-            <input id="issue" type="number" min="0" max="300" step="any" value="120" style="margin-top:8px;">
-          </label>
-          <div style="margin-top:10px; font-size:10px; color:#688082;">Quick Presets:</div>
-          <div class="inv-preset-row">
-            <button type="button" class="preset-btn" data-qty="30">30 kg</button>
-            <button type="button" class="preset-btn" data-qty="50">50 kg</button>
-            <button type="button" class="preset-btn active" data-qty="100">100 kg (Full Old Stock)</button>
-            <button type="button" class="preset-btn" data-qty="120">120 kg</button>
-            <button type="button" class="preset-btn" data-qty="200">200 kg</button>
-            <button type="button" class="preset-btn" data-qty="300">300 kg (Max All)</button>
+      <!-- The Two Raw Material Batches -->
+      <div class="demo-batch-grid">
+        <div class="demo-batch-card old">
+          <div class="demo-batch-header">
+            <b>Batch PP-OLD · Older Stock</b>
+            <span class="batch-badge old">Keeps Old Price</span>
           </div>
+          <div style="font-size:12px; color:#234743; margin:6px 0;">
+            Receipt Date: <b>2026-10-20</b> (Pre-Hike)<br>
+            Available Stock: <b>100.00 kg</b><br>
+            Landed Cost: <b>${money(baseline)} / kg</b> (Baseline USD $2.00 @ ₹${fx})
+          </div>
+          <small style="color:#577e74;">Capitalized at historical cost. Protected from the price hike.</small>
         </div>
 
-        <!-- Finished Product Demand Calculator -->
-        <div class="inv-calc-box">
-          <label style="font-size:11px; font-weight:600; color:#23494b;">Option B: Derive Demand from Finished Units</label>
-          <p style="font-size:10px; margin:4px 0 10px;">Select product and units to automatically account for BOM scrap yield loss:</p>
-          <div class="product-demand-row">
-            <select id="prod-demand-select">
-              ${products.map(p => `
-                <option value="${p.id}" ${p.id === 'B' ? 'selected' : ''}>
-                  ${p.name} (Gross: ${(p.qty / (1 - p.scrap / 100)).toFixed(4)} kg/unit)
-                </option>
-              `).join('')}
-            </select>
-            <input id="prod-demand-units" type="number" min="1" step="1" value="500" placeholder="Units">
-            <button type="button" id="btn-apply-demand" class="btn-calc-apply">Apply Demand</button>
+        <div class="demo-batch-card new">
+          <div class="demo-batch-header">
+            <b>Batch PP-NEW · New Scenario Stock</b>
+            <span class="batch-badge new">Price Changes from 01-Nov</span>
           </div>
-          <div id="demand-helper-text" style="font-size:10px; color:#49796e; margin-top:8px;">
-            500 units of Product B require <b>105.26 kg</b> gross resin.
+          <div style="font-size:12px; color:#492820; margin:6px 0;">
+            Receipt Date: <b>${effectiveDate}</b> (Post-Hike)<br>
+            Available Stock: <b>200.00 kg</b><br>
+            Landed Cost: <b>${money(scenarioLanded)} / kg</b> (+12% Hike USD $2.24 @ ₹${fx})
           </div>
+          <small style="color:#925648;">Reflects the new replacement cost after supplier price hike.</small>
         </div>
       </div>
 
-      <!-- Real-Time Dynamic Analysis Result Container -->
-      <div id="fifo-analysis-container"></div>
+      <!-- Single Product Demonstration: Product B -->
+      <div class="demo-run-box">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:10px;">
+          <div>
+            <span class="eyebrow">PRODUCT DEMONSTRATION</span>
+            <h3 style="margin:4px 0 2px; font-size:16px;">Product B: Medical Connector Production Run</h3>
+            <p style="font-size:11px; margin:0; color:#5b777a;">
+              Each unit consumes <b>0.20 kg</b> net resin ÷ 0.95 (5% scrap) = <b>0.2105 kg gross resin</b>. Selling Price: <b>₹74.00</b>.
+            </p>
+          </div>
+          <div style="text-align:right;">
+            <label style="font-size:11px; font-weight:600; color:#1c4042; display:block;">
+              Production Quantity (Units):
+            </label>
+            <input id="demo-prod-units" type="number" min="1" max="1400" value="500" style="padding:7px 10px; width:120px; font-size:13px; font-weight:700; border:1px solid #c9d8d5; border-radius:5px; text-align:right; margin-top:4px;">
+          </div>
+        </div>
+
+        <div style="display:flex; gap:6px; margin:12px 0 16px; flex-wrap:wrap;">
+          <span style="font-size:10px; color:#688285; align-self:center; margin-right:4px;">Quick Batch Sizes:</span>
+          <button type="button" class="preset-btn" data-units="250">250 units (52.6 kg)</button>
+          <button type="button" class="preset-btn" data-units="475">475 units (100 kg - Exact Old Batch)</button>
+          <button type="button" class="preset-btn active" data-units="500">500 units (105.3 kg)</button>
+          <button type="button" class="preset-btn" data-units="700">700 units (147.4 kg)</button>
+        </div>
+
+        <div id="fifo-demo-output"></div>
+      </div>
     </section>
   `;
 
@@ -520,37 +494,13 @@ function renderInventory() {
     btn.onclick = () => {
       document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      $('#issue').value = btn.dataset.qty;
+      $('#demo-prod-units').value = btn.dataset.units;
       updateFifo();
     };
   });
 
-  // Attach Finished Product Demand Handler
-  const updateDemandHelper = () => {
-    const pId = $('#prod-demand-select').value;
-    const units = Number($('#prod-demand-units').value) || 0;
-    const p = products.find(x => x.id === pId);
-    if (!p) return;
-    const req = units * grossResin(p);
-    $('#demand-helper-text').innerHTML = `${units} units of <b>${p.name}</b> require <b>${req.toFixed(2)} kg</b> gross resin (incl. ${p.scrap}% scrap).`;
-  };
-
-  $('#prod-demand-select').onchange = updateDemandHelper;
-  $('#prod-demand-units').oninput = updateDemandHelper;
-
-  $('#btn-apply-demand').onclick = () => {
-    const pId = $('#prod-demand-select').value;
-    const units = Number($('#prod-demand-units').value) || 0;
-    const p = products.find(x => x.id === pId);
-    if (!p) return;
-    const req = Math.min(300, Math.max(0, units * grossResin(p)));
-    $('#issue').value = req.toFixed(2);
-    document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
-    updateFifo();
-  };
-
-  $('#issue').oninput = () => {
-    document.querySelectorAll('.preset-btn').forEach(b => b.classList.toggle('active', Number(b.dataset.qty) === Number($('#issue').value)));
+  $('#demo-prod-units').oninput = () => {
+    document.querySelectorAll('.preset-btn').forEach(b => b.classList.toggle('active', Number(b.dataset.units) === Number($('#demo-prod-units').value)));
     updateFifo();
   };
 
@@ -558,29 +508,34 @@ function renderInventory() {
 }
 
 function updateFifo() {
-  const q = Number($('#issue').value);
+  const units = Number($('#demo-prod-units').value);
+  const container = $('#fifo-demo-output');
+  if (!container) return;
+
+  const p = products.find(x => x.id === 'B') || products[1];
+  const grossPerUnit = grossResin(p);
+  const convPerUnit = p.other + conversionCost(p);
+  const reqResin = units * grossPerUnit;
+
   const costingDate = $('#date').value;
   const effectiveDate = $('#effective').value;
   const available = costingDate >= effectiveDate;
-  const maxAvailable = available ? 300 : 100;
-  const container = $('#fifo-analysis-container');
+  const maxAvailableStock = available ? 300 : 100;
+  const maxUnits = maxAvailableStock / grossPerUnit;
 
-  if (!container) return;
-
-  if (!Number.isFinite(q) || q < 0) {
+  if (!Number.isFinite(units) || units <= 0) {
     container.innerHTML = `
       <div class="alert" style="background:#fdf2ee; border-color:#f1c2b5; color:#a13b28;">
-        Please enter a valid positive resin requirement in kg.
+        Please enter a valid production batch size of units.
       </div>
     `;
     return;
   }
 
-  if (q > maxAvailable) {
+  if (reqResin > maxAvailableStock) {
     container.innerHTML = `
       <div class="alert" style="background:#fdf2ee; border-color:#f1c2b5; color:#a13b28;">
-        ⚠️ <b>Requested quantity (${q} kg) exceeds available inventory (${maxAvailable} kg)</b> on costing date ${costingDate}.
-        ${!available ? '<br>Note: The second batch (200 kg) is not yet received until ' + effectiveDate + '.' : ''}
+        ⚠️ <b>${units} units require ${reqResin.toFixed(2)} kg resin</b>, which exceeds available stock (${maxAvailableStock} kg) on ${costingDate}. Maximum possible is ~${Math.floor(maxUnits)} units.
       </div>
     `;
     return;
@@ -591,106 +546,109 @@ function updateFifo() {
   const duty = val('duty');
   const isPostHike = costingDate >= effectiveDate;
   const supplierUSD = getSupplierPrice(isPostHike);
-  const scenarioLandedRate = landed(supplierUSD, fx, freight, duty);
+  const newLandedRate = landed(supplierUSD, fx, freight, duty);
 
   const oldStock = 100;
-  const freshStock = available ? 200 : 0;
-  const v = fifo(q, scenarioLandedRate, oldStock, freshStock);
+  const oldDrawn = Math.min(reqResin, oldStock);
+  const freshDrawn = Math.max(0, reqResin - oldDrawn);
 
-  const oldCostTotal = v.old * baseline;
-  const freshCostTotal = v.fresh * scenarioLandedRate;
-  const oldPctDrawn = oldStock > 0 ? (v.old / oldStock) * 100 : 0;
-  const freshPctDrawn = freshStock > 0 ? (v.fresh / freshStock) * 100 : 0;
+  const oldCostTotal = oldDrawn * baseline;
+  const freshCostTotal = freshDrawn * newLandedRate;
+  const totalMaterialCost = oldCostTotal + freshCostTotal;
+  const blendedRatePerKg = reqResin > 0 ? totalMaterialCost / reqResin : 0;
+  const blendedResinPerUnit = totalMaterialCost / units;
+  const totalCostPerUnit = blendedResinPerUnit + convPerUnit;
+  const profitPerUnit = p.sp - totalCostPerUnit;
+  const marginPct = (profitPerUnit / p.sp) * 100;
+
+  // Comparison if made entirely at new price
+  const replacementResinCost = reqResin * newLandedRate;
+  const savings = replacementResinCost - totalMaterialCost;
+  const replacementUnitCost = (replacementResinCost / units) + convPerUnit;
+  const replacementProfit = p.sp - replacementUnitCost;
+  const replacementMargin = (replacementProfit / p.sp) * 100;
 
   container.innerHTML = `
-    <h3 style="margin:25px 0 10px; font-size:14px; color:#183c3e;">3. Real-Time Allocation Analysis (${q.toFixed(2)} kg Required)</h3>
+    <!-- Step by Step FIFO Allocation Cards -->
+    <div class="demo-steps-container">
+      <div class="demo-step-card old">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <span class="eyebrow" style="color:#2a7460;">STEP 1: CONSUME OLDER STOCK (KEEPS OLD PRICE)</span>
+            <h4 style="margin:2px 0; font-size:13px; color:#184239;">Older Batch PP-OLD (Received Pre-Hike)</h4>
+          </div>
+          <b style="font-size:14px; color:#1e5b4c;">${money(oldCostTotal)}</b>
+        </div>
+        <p style="font-size:11px; margin:4px 0; color:#385e54;">
+          <b>${oldDrawn.toFixed(2)} kg</b> drawn at older baseline price of <b>${money(baseline)} / kg</b>.
+          ${oldDrawn >= 100 ? '<i>(Exhausts all 100 kg of older stock).</i>' : `<i>(${ (100 - oldDrawn).toFixed(2) } kg still remains in old stock).</i>`}
+        </p>
+      </div>
 
-    <!-- 4 Dynamic KPI Cards -->
-    <div class="inv-stats-grid">
+      <div class="demo-step-card new">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <span class="eyebrow" style="color:#9e4632;">STEP 2: DRAW NEW STOCK FOR RESIDUAL BALANCE</span>
+            <h4 style="margin:2px 0; font-size:13px; color:#4a231b;">New Scenario Batch PP-NEW (From 01-Nov-2026)</h4>
+          </div>
+          <b style="font-size:14px; color:#9c3821;">${money(freshCostTotal)}</b>
+        </div>
+        <p style="font-size:11px; margin:4px 0; color:#5a372f;">
+          <b>${freshDrawn.toFixed(2)} kg</b> drawn at new +12% price of <b>${money(newLandedRate)} / kg</b>.
+        </p>
+      </div>
+
+      <div class="demo-step-card total">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <span class="eyebrow" style="color:#1d4b4a;">STEP 3: TOTAL MATERIAL ISSUE FOR THIS RUN</span>
+            <h4 style="margin:2px 0; font-size:13px; color:#173b3c;">Combined ${reqResin.toFixed(2)} kg Gross Resin</h4>
+          </div>
+          <b style="font-size:16px; color:#173b3c;">${money(totalMaterialCost)}</b>
+        </div>
+        <p style="font-size:11px; margin:4px 0; color:#315456;">
+          Blended Material Rate: <b>${money(blendedRatePerKg)} / kg</b> · Blended Resin Cost per Unit: <b>${money(blendedResinPerUnit)} / unit</b>.
+        </p>
+      </div>
+    </div>
+
+    <!-- Product B Profitability Result for this Run -->
+    <div class="demo-kpi-summary">
       <div class="inv-stat-card">
-        <label>Total Issue Quantity</label>
-        <strong>${q.toFixed(2)} kg</strong>
-        <small>${((q / (oldStock + freshStock)) * 100).toFixed(1)}% of total available stock</small>
+        <label>Product B Run Cost / Unit</label>
+        <strong>${money(totalCostPerUnit)}</strong>
+        <small>Resin: ${money(blendedResinPerUnit)} + Conversion: ${money(convPerUnit)}</small>
       </div>
 
       <div class="inv-stat-card">
-        <label>Total Material Cost</label>
-        <strong>${money(v.total)}</strong>
-        <small>${money(oldCostTotal)} (Old) + ${money(freshCostTotal)} (New)</small>
+        <label>Selling Price (SP)</label>
+        <strong>${money(p.sp)}</strong>
+        <small>Catalog price per connector</small>
       </div>
 
-      <div class="inv-stat-card">
-        <label>Blended Landed Rate</label>
-        <strong>${money(v.blended)} / kg</strong>
-        <small>vs Replacement Rate: ${money(scenarioLandedRate)}/kg</small>
+      <div class="inv-stat-card ${profitPerUnit < 0 ? 'critical' : 'highlight'}">
+        <label>Gross Profit / Unit</label>
+        <strong style="color:${profitPerUnit < 0 ? '#b24c38' : '#1d5e4b'};">${money(profitPerUnit)}</strong>
+        <small>Gross Margin: <b>${marginPct.toFixed(2)}%</b></small>
       </div>
 
       <div class="inv-stat-card highlight">
         <label>Savings via Older Stock</label>
-        <strong>${money(v.savings)}</strong>
-        <small>Saved by consuming older ₹193.60 stock</small>
+        <strong style="color:#1d5e4b;">${money(savings)}</strong>
+        <small>Saved vs buying all at new price</small>
       </div>
     </div>
 
-    <!-- Batch Depletion Breakdown Table -->
-    <div class="tablewrap" style="margin-top:15px;">
-      <table class="batch-table">
-        <thead>
-          <tr>
-            <th>Batch</th>
-            <th>Opening Stock</th>
-            <th>Allocated / Drawn</th>
-            <th>Remaining Stock</th>
-            <th>Unit Cost</th>
-            <th>Total Issue Cost</th>
-            <th>Stock Depletion</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><b>PP-BATCH-001 (Old)</b><br><small>Rec: 2026-10-20</small></td>
-            <td>100.00 kg</td>
-            <td><b style="color:#216252;">${v.old.toFixed(2)} kg</b></td>
-            <td><b>${v.remainingOld.toFixed(2)} kg</b></td>
-            <td>${money(baseline)}/kg</td>
-            <td><b>${money(oldCostTotal)}</b></td>
-            <td style="width:140px;">
-              <div style="font-size:9px; color:#678284;">${oldPctDrawn.toFixed(0)}% drawn</div>
-              <div class="inv-progress-track">
-                <div class="inv-progress-fill" style="width:${oldPctDrawn}%;"></div>
-              </div>
-            </td>
-          </tr>
-          <tr>
-            <td><b>PP-BATCH-002 (New)</b><br><small>Rec: ${effectiveDate}</small></td>
-            <td>${freshStock.toFixed(2)} kg</td>
-            <td><b style="color:#b24f38;">${v.fresh.toFixed(2)} kg</b></td>
-            <td><b>${v.remainingFresh.toFixed(2)} kg</b></td>
-            <td>${money(scenarioLandedRate)}/kg</td>
-            <td><b>${money(freshCostTotal)}</b></td>
-            <td style="width:140px;">
-              <div style="font-size:9px; color:#678284;">${freshPctDrawn.toFixed(0)}% drawn</div>
-              <div class="inv-progress-track">
-                <div class="inv-progress-fill new" style="width:${freshPctDrawn}%;"></div>
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <!-- Dynamic Mathematical Proof Box -->
-    <div class="inv-step-math">
-      <b>Live FIFO Valuation Proof for ${q.toFixed(2)} kg:</b><br>
-      • Old Batch Contribution: ${v.old.toFixed(2)} kg × ${money(baseline)}/kg = <b>${money(oldCostTotal)}</b><br>
-      • New Batch Contribution: ${v.fresh.toFixed(2)} kg × ${money(scenarioLandedRate)}/kg = <b>${money(freshCostTotal)}</b><br>
-      -----------------------------------------------------------------------------------------------------<br>
-      • Total Landed Issue Cost: ${money(oldCostTotal)} + ${money(freshCostTotal)} = <b>${money(v.total)}</b><br>
-      • Blended Weighted Landed Rate: ${money(v.total)} ÷ ${q.toFixed(2)} kg = <b>${money(v.blended)} / kg</b><br>
-      • Financial Benefit: ${v.old.toFixed(2)} kg × ( ${money(scenarioLandedRate)} − ${money(baseline)} ) = <b>${money(v.savings)} cost buffer preserved</b>.
+    <!-- Key Finance Insight & Blindspot Callout -->
+    <div class="alert" style="background:#f4fbf8; border-color:#bce5d8; color:#184a3c; margin-top:14px; font-size:12px; line-height:1.7;">
+      💡 <b>The Demonstration Insight (Why Finance Could Not Tell at First):</b><br>
+      • Because <b>older stock keeps the old price (${money(baseline)}/kg)</b>, this production run of ${units} units still appears profitable with a <b>+${marginPct.toFixed(2)}% gross margin</b> (+${money(profitPerUnit)}/unit profit).<br>
+      • <b>The Hidden Trap</b>: Once this run consumes the remaining older stock, the very next batch must be produced entirely using new stock @ <b>${money(newLandedRate)}/kg</b>.<br>
+      • Unit cost then jumps immediately to <b>${money(replacementUnitCost)}</b>, exceeding the selling price (${money(p.sp)}) and collapsing into a permanent <b style="color:#b24c38;">${replacementMargin.toFixed(2)}% net loss (${money(replacementProfit)} / unit)</b>!
     </div>
   `;
 }
+
 
 
 function show(id) {
